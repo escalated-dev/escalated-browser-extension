@@ -17,8 +17,9 @@
 - Additive only: no existing route, field or default changes meaning. API stays off by default (`escalated.api.enabled`).
 - Patch version bumps: escalated-laravel 1.9.21, frontend 0.12.13.
 - One-time code: 60 seconds, single use, stored as sha256, PKCE S256 only.
-- Default allowed redirect pattern: `^https://[a-p]{32}\.chromiumapp\.org/$`; config `escalated.api.extension_redirect_patterns` (array of regexes).
-- Extension tokens: abilities `["agent"]`, name `Browser extension (<client_name>)` with client_name trimmed to 60 chars, `kind = 'browser_extension'`, `expires_at` from `escalated.api.extension_token_expiry_days` (default null).
+- Default allowed redirect pattern: `\Ahttps://[a-p]{32}\.chromiumapp\.org/\z` (full-string match; in PHP use `\A...\z` or the `D` modifier so a trailing newline cannot match); config `escalated.api.extension_redirect_patterns` (array of regexes, held to the same full-string rule).
+- Extension tokens: abilities `["agent"]`, name `Browser extension (<client_name>)` with client_name truncated to 64 chars and escaped on output, `kind = 'browser_extension'`, the extension ID (redirect_uri host label) stored with the code and the token, `expires_at` from `escalated.api.extension_token_expiry_days` (default null).
+- The contract (escalated-developer-context `contracts/staff-api-v1.md`, sections "Connect page requirements" and "Exchange rules") is normative and overrides this plan where they differ. In particular: CSRF-protected POST approve/deny, no auto-approve, `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY` on connect pages, invalid non-redirect parameters redirect with `error=invalid_request&state=`, invalid redirect_uri shows an error page; codes are 32 random bytes base64url, stored hashed, consumed atomically on any presentation (even a failed one), exchange 200 carries `Cache-Control: no-store`, a replayed code revokes its token, a body missing fields is 422 before any lookup; `/meta` with an invalid token is the 200 public shape with `Vary: Authorization` and `Cache-Control: no-store`.
 - Feature list served by `/meta` on Laravel: `tickets.create`, `tickets.macro`, `tickets.updated_since`, `tickets.last_customer_reply_at`, `canned_responses`, `macros`, `auth.exchange`, `auth.revoke`, plus `realtime` when broadcasting is on.
 - UI copy: no em dashes; all new strings translated in the frontend's 14 locales (English source, other locales may copy English for now only if that is the repo's existing practice; check `src/locales` before deciding).
 - No "Claude", "Filament" or AI mentions in commits or PRs. Never commit `.security-audit/`.
@@ -113,7 +114,19 @@
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** full suite `vendor/bin/pest` and `vendor/bin/pint --test` → PASS.
 - [ ] **Step 5: Commit** `git commit -m "Add browser extension connect page and token list for agents"`
 
-### Task 6: Conformance in Laravel CI
+### Task 6: Close Laravel's divergences from the contract
+
+The contract's change log lists where Laravel 1.9.20 differs. Fix each, additively where existing clients could notice (keep old keys alongside new ones where a key is renamed).
+
+**Files:** `src/Http/Resources/{TicketResource,TicketCollectionResource,MacroResource}.php`, `src/Http/Controllers/Api/{TicketController,ReportController}.php`, `src/Drivers/LocalDriver.php`, `src/Services/ReportingService.php`, `src/Models/Ticket.php` (transition guard), `tests/Feature/Api/ContractDivergenceTest.php`
+
+- [ ] **Step 1: Failing tests**, one `it` each: Ticket show has `last_reply_at`, `sla_breached`, `is_following` and `followers_count` always present; `ticket_type` null in the database is emitted as `"question"`; `GET /macros` items have `actions` (keep `steps` too); unknown report export type is 404 `{message}`, not 500; `following=1` returns only followed tickets; `GET /reports/summary` `by_status[].value` and `by_priority[].value` are integers; a disallowed status transition is 422 with `errors.status` (not 500) and setting the current status is a 200 no-op; list order breaks `created_at` ties by `id` in the same direction (two tickets with the same `created_at`).
+- [ ] **Step 2: Run** `vendor/bin/pest tests/Feature/Api/ContractDivergenceTest.php` → FAIL.
+- [ ] **Step 3: Implement.** Transition guard: catch the `InvalidArgumentException` in the API status action (or validate against the install's table first) and return a 422 validation error on `status`.
+- [ ] **Step 4: Run** full `vendor/bin/pest` and `vendor/bin/pint --test` → PASS.
+- [ ] **Step 5: Commit** `git commit -m "Align the staff API with contract v1"`
+
+### Task 7: Conformance in Laravel CI
 
 **Files:**
 - Create: `docker/host-app/app/Console/Commands/ConformanceSeed.php` (host-app only, not the package), `.github/workflows/conformance.yml`
@@ -121,7 +134,7 @@
 
 **Interfaces:**
 - Consumes: plan 1 `conformance/` suite and its env vars.
-- Produces: `php artisan escalated:conformance-seed` (host app) creating two agents, one admin, three open tickets (one unassigned), one department, one canned response, one macro, printing `AGENT_TOKEN=...`, `ADMIN_TOKEN=...`, `REVOCABLE_TOKEN=...` lines.
+- Produces: `php artisan escalated:conformance-seed` (host app, throwaway database only) creating two agents, one admin, at least three open tickets (one unassigned, one already assigned, since the API cannot unassign), one department, one canned response, one macro whose actions only set priority or add a note, printing `AGENT_TOKEN=...`, `ADMIN_TOKEN=...`, `REVOCABLE_TOKEN=...`, and the connect fixture `CONNECT_CODE=...`, `CONNECT_CODE_2=...`, `CONNECT_VERIFIER=...`, `CONNECT_REDIRECT_URI=...` (two codes issued through `ApiTokenCode::issue` for one verifier and a valid chromiumapp redirect, with a long TTL; CI only). The workflow also sets `ESCALATED_CONFORMANCE_FORBIDDEN_TRANSITION` to a transition Laravel's default table refuses (for example `open:live`). Match the env var names in the suite's README exactly.
 
 - [ ] **Step 1: Write the workflow**: build and start `docker/compose.yml` with `ESCALATED_API_ENABLED=true`, run the seed command, export the tokens, clone `escalated-dev/escalated-developer-context` (pinned to the merged plan 1 commit), `cd conformance && npm ci && ESCALATED_CONFORMANCE_URL=http://localhost:8080/support/api/v1 npm test`.
 - [ ] **Step 2: Run locally** the same steps with Docker and confirm all tests pass.
