@@ -4,10 +4,10 @@ import type { Session } from '@/api/client'
 import { PENDING_OPEN_KEY } from '@/background/notify'
 import type { OpenTicketMessage } from '@/background/messages'
 import { getSession } from '@/state/storage'
-import { en } from '@/i18n/en'
 import PanelHeader from './components/PanelHeader.vue'
 import ConnectView from './views/ConnectView.vue'
 import QueueView from './views/QueueView.vue'
+import TicketView from './views/TicketView.vue'
 import { openTicket, router, showQueue } from './router'
 
 const PENDING_MAX_AGE_MS = 2 * 60 * 1000
@@ -47,7 +47,8 @@ function onConnected(s: Session): void {
   session.value = s
   needsReconnect.value = false
   rememberAddress(s.origin)
-  showQueue()
+  // A ticket opened from a notification while signed out is kept, not dropped.
+  if (router.view !== 'ticket') showQueue()
 }
 
 function onDisconnected(): void {
@@ -116,11 +117,16 @@ onBeforeUnmount(() => {
       />
       <template v-else>
         <PanelHeader :session="session" @disconnected="onDisconnected" />
-        <QueueView v-if="router.view === 'queue'" :session="session" @open="openTicket" />
-        <section v-else-if="router.view === 'ticket'" class="placeholder">
-          <button type="button" @click="showQueue">{{ en.ticket.back }}</button>
-          <p>#{{ router.currentReference }}</p>
-        </section>
+        <KeepAlive>
+          <QueueView v-if="router.view === 'queue'" :session="session" @open="openTicket" />
+        </KeepAlive>
+        <TicketView
+          v-if="router.view === 'ticket' && router.currentReference"
+          :key="router.currentReference"
+          :session="session"
+          :reference="router.currentReference"
+          @back="showQueue"
+        />
       </template>
     </template>
   </main>
@@ -132,16 +138,5 @@ onBeforeUnmount(() => {
   color: var(--esc-panel-text);
   background: var(--esc-panel-bg);
   font-size: 13px;
-}
-.placeholder {
-  padding: 12px;
-}
-.placeholder button {
-  font: inherit;
-  color: var(--esc-panel-accent);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
 }
 </style>

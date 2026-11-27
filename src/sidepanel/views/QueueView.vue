@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, ref, watch } from 'vue'
 import type { Session, TicketListItem, TicketQuery } from '@/api/client'
 import { send } from '@/background/messages'
 import { en } from '@/i18n/en'
@@ -71,6 +71,13 @@ watch(search, (v) => {
   }, 300)
 })
 onBeforeUnmount(() => clearTimeout(timer))
+
+// Coming back from a ticket keeps the tab and search; refresh the list in place.
+let activatedOnce = false
+onActivated(() => {
+  if (activatedOnce) void load(1)
+  activatedOnce = true
+})
 
 const hasMore = computed(() => page.value < lastPage.value)
 const empty = computed(() => {

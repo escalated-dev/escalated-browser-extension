@@ -233,7 +233,7 @@ describe('App', () => {
     expect(respond).toHaveBeenCalledWith({ ok: true })
     expect(router.view).toBe('ticket')
     expect(router.currentReference).toBe('ESC-42')
-    expect(w.text()).toContain('#ESC-42')
+    expect(w.find('button.back').exists()).toBe(true)
   })
 
   it('ignores open-ticket from other senders', async () => {
