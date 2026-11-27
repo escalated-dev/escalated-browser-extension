@@ -23,9 +23,11 @@ export type ApiCall = (typeof API_CALLS)[number]
 
 export type ApiMessage = { type: 'api'; call: ApiCall; args: unknown[] }
 export type PollNowMessage = { type: 'poll-now' }
+/** Panel opened: re-read /meta for the connected helpdesk. */
+export type RefreshMetaMessage = { type: 'refresh-meta' }
 /** Worker to panel. */
 export type OpenTicketMessage = { type: 'open-ticket'; reference: string }
-export type WorkerMessage = ApiMessage | PollNowMessage
+export type WorkerMessage = ApiMessage | PollNowMessage | RefreshMetaMessage
 
 export type WireError = { status: number; message: string; errors?: Record<string, string[]> }
 export type ApiResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: WireError }
@@ -52,6 +54,10 @@ export async function send<C extends ApiCall>(
     throw new ApiError(res.error.message, res.error.status, extra)
   }
   return res.data as Awaited<ReturnType<Client[C]>>
+}
+
+export async function refreshMetaNow(): Promise<void> {
+  await chrome.runtime.sendMessage({ type: 'refresh-meta' } satisfies RefreshMetaMessage)
 }
 
 export async function pollNow(): Promise<void> {

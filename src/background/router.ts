@@ -2,7 +2,8 @@ import { ApiError } from '../api/errors'
 import { createClient } from '../api/client'
 import { getSession } from '../state/storage'
 import { isApiCall, type ApiResponse, type WireError } from './messages'
-import { handleUnauthorized, poll } from './poller'
+import { refreshMeta } from './meta'
+import { expectMine, forgetExpected, handleUnauthorized, poll, recordMine } from './poller'
 
 type Sender = { id?: string; url?: string }
 
@@ -28,17 +29,33 @@ function toWire(e: unknown, token: string): WireError {
   return { status: 0, message: 'Could not reach the helpdesk' }
 }
 
+const sameId = (a: unknown, b: unknown) => a !== undefined && a !== null && String(a) === String(b)
+
 async function callApi(call: unknown, args: unknown): Promise<ApiResponse> {
   if (!isApiCall(call) || !Array.isArray(args)) {
     return { ok: false, error: { status: 400, message: 'Bad request' } }
   }
   const session = await getSession()
   if (!session) return { ok: false, error: { status: 401, message: 'Not connected' } }
+  const me = session.user.id
+  // Assigning to yourself must not come back a minute later as "Assigned to you".
+  const selfAssign = call === 'assign' && typeof args[0] === 'string' && sameId(args[1], me)
+  if (selfAssign) expectMine(args[0] as string)
   try {
     const client = createClient(session.apiBase, session.token)
     const fn = client[call] as (...a: unknown[]) => Promise<unknown>
-    return { ok: true, data: await fn(...args) }
+    const data = await fn(...args)
+    if (selfAssign) await recordMine(args[0] as string).catch(() => undefined)
+    if (call === 'createTicket') {
+      const created = (data as { data?: { reference?: unknown; assignee?: { id?: unknown } | null } } | null)
+        ?.data
+      if (typeof created?.reference === 'string' && sameId(created.assignee?.id, me)) {
+        await recordMine(created.reference).catch(() => undefined)
+      }
+    }
+    return { ok: true, data }
   } catch (e) {
+    if (selfAssign) forgetExpected(args[0] as string)
     if (e instanceof ApiError && e.status === 401) await handleUnauthorized().catch(() => undefined)
     return { ok: false, error: toWire(e, session.token) }
   }
@@ -54,6 +71,12 @@ export function handleMessage(msg: unknown, sender: Sender): Promise<ApiResponse
     return poll().then(
       () => ({ ok: true as const }),
       (): ApiResponse => ({ ok: false, error: { status: 0, message: 'Poll failed' } }),
+    )
+  }
+  if (m.type === 'refresh-meta') {
+    return refreshMeta().then(
+      () => ({ ok: true as const }),
+      () => ({ ok: true as const }),
     )
   }
   return undefined
