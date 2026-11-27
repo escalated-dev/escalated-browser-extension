@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
+    "build:e2e": "vite build --mode e2e",
+    "e2e": "playwright test",
     "zip": "node scripts/zip.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.3.5",
     "@types/chrome": "^0.3.8",
     "@types/node": "^26.6.11",

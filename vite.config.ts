@@ -1,4 +1,4 @@
-import { renameSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
@@ -17,16 +17,34 @@ const renameSidepanelHtml = (): Plugin => ({
   },
 })
 
-export default defineConfig({
+// Test-only build (npm run build:e2e): the manifest also lists the local hosts the mock
+// helpdesk runs on, so chrome.permissions.request resolves without a prompt. No code differs.
+const e2eManifest = (): Plugin => ({
+  name: 'e2e-manifest',
+  apply: 'build',
+  writeBundle(options) {
+    const file = join(options.dir ?? path('./dist-e2e'), 'manifest.json')
+    const manifest = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+    manifest.name = 'Escalated (e2e build)'
+    manifest.host_permissions = ['http://localhost/*', 'http://127.0.0.1/*']
+    writeFileSync(
+      file,
+      `${JSON.stringify(manifest, null, 2)}
+`,
+    )
+  },
+})
+
+export default defineConfig(({ mode }) => ({
   root: path('./src/sidepanel'),
   publicDir: path('./public'),
   base: './',
-  plugins: [vue(), tailwindcss(), renameSidepanelHtml()],
+  plugins: [vue(), tailwindcss(), renameSidepanelHtml(), ...(mode === 'e2e' ? [e2eManifest()] : [])],
   resolve: {
     alias: { '@': path('./src') },
   },
   build: {
-    outDir: path('./dist'),
+    outDir: path(mode === 'e2e' ? './dist-e2e' : './dist'),
     emptyOutDir: true,
     target: 'chrome116',
     modulePreload: false,
@@ -42,4 +60,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

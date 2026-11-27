@@ -4,7 +4,17 @@ import tseslint from 'typescript-eslint'
 import vue from 'eslint-plugin-vue'
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', '.superpowers/', '*.zip'] },
+  {
+    ignores: [
+      'dist/',
+      'dist-e2e/',
+      'test-results/',
+      'playwright-report/',
+      'node_modules/',
+      '.superpowers/',
+      '*.zip',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],

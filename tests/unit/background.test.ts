@@ -17,7 +17,13 @@ const session = {
 } as unknown as Session
 
 type Listener = (msg: unknown, sender: unknown, respond: (r?: unknown) => void) => boolean | void
-function dispatch(msg: unknown, sender: Record<string, unknown> = { id: getChromeFake().runtime.id }) {
+function dispatch(
+  msg: unknown,
+  sender: Record<string, unknown> = {
+    id: getChromeFake().runtime.id,
+    url: getChromeFake().runtime.getURL('sidepanel.html'),
+  },
+) {
   return new Promise<{ response?: unknown; answered: boolean }>((resolve) => {
     const respond = (r?: unknown) => resolve({ response: r, answered: true })
     const returned = captured!(msg, sender, respond)
@@ -89,15 +95,27 @@ describe('message router', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('ignores messages from other extensions and from tabs', async () => {
-    const a = await dispatch({ type: 'api', call: 'dashboard', args: [] }, { id: 'someoneelse' })
-    expect(a.answered).toBe(false)
-    const b = await dispatch(
-      { type: 'api', call: 'dashboard', args: [] },
-      { id: getChromeFake().runtime.id, tab: { id: 1 } },
-    )
-    expect(b.answered).toBe(false)
+  it('ignores messages from other extensions, content scripts and web pages', async () => {
+    const id = getChromeFake().runtime.id
+    const msg = { type: 'api', call: 'dashboard', args: [] }
+    const senders: Record<string, unknown>[] = [
+      { id: 'someoneelse', url: getChromeFake().runtime.getURL('sidepanel.html') },
+      { id, url: 'https://evil.example/page', tab: { id: 1 } },
+      { id, url: `https://evil.example/chrome-extension://${id}/` },
+      { id },
+      { url: getChromeFake().runtime.getURL('sidepanel.html') },
+    ]
+    for (const sender of senders) expect((await dispatch(msg, sender)).answered).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts the extension own page opened in a tab', async () => {
+    const id = getChromeFake().runtime.id
+    const r = await dispatch(
+      { type: 'api', call: 'dashboard', args: [] },
+      { id, url: getChromeFake().runtime.getURL('sidepanel.html'), tab: { id: 9 } },
+    )
+    expect(r.answered).toBe(true)
   })
 
   it('returns errors as values and never includes the token', async () => {

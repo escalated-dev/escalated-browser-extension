@@ -4,11 +4,18 @@ import { getSession } from '../state/storage'
 import { isApiCall, type ApiResponse, type WireError } from './messages'
 import { handleUnauthorized, poll } from './poller'
 
-type Sender = { id?: string; tab?: unknown }
+type Sender = { id?: string; url?: string }
 
-/** Only this extension's own pages; there are no content scripts, so a tab means a stranger. */
+/**
+ * Only this extension's own pages (the side panel, or one of its pages opened in a tab).
+ * A content script carries this extension's id but the URL of the web page it runs in.
+ */
 export function isTrustedSender(sender: Sender): boolean {
-  return sender.id === chrome.runtime.id && sender.tab === undefined
+  return (
+    sender.id === chrome.runtime.id &&
+    typeof sender.url === 'string' &&
+    sender.url.startsWith(chrome.runtime.getURL(''))
+  )
 }
 
 function toWire(e: unknown, token: string): WireError {
