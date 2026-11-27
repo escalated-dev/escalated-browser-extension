@@ -1,0 +1,91 @@
+@import 'tailwindcss';
+
+/*
+ * Agent panel tokens, copied from @escalated-dev/escalated (src/plugin.js,
+ * panelLightDefaults and panelDarkDefaults). Light is the default; dark follows
+ * prefers-color-scheme. The derived tokens (selected, primary) are the values
+ * that package computes for its default accent in each mode.
+ */
+:root {
+  color-scheme: light dark;
+  --esc-panel-bg: #f9fafb;
+  --esc-panel-sidebar-bg: #ffffff;
+  --esc-panel-topbar-bg: rgba(255, 255, 255, 0.95);
+  --esc-panel-surface: #ffffff;
+  --esc-panel-surface-alt: #f9fafb;
+  --esc-panel-border: #e5e7eb;
+  --esc-panel-border-input: #d1d5db;
+  --esc-panel-text: #111827;
+  --esc-panel-text-secondary: #374151;
+  --esc-panel-text-tertiary: #646b78;
+  --esc-panel-text-muted: #9ca3af;
+  --esc-panel-accent: #3b82f6;
+  --esc-panel-accent-secondary: #6366f1;
+  --esc-panel-accent-hover: #2563eb;
+  --esc-panel-accent-secondary-hover: #818cf8;
+  --esc-panel-hover: rgba(0, 0, 0, 0.02);
+  --esc-panel-active: #eff6ff;
+  --esc-panel-note-bg: #fffbeb;
+  --esc-panel-note-border: #fcd34d;
+  --esc-panel-note-text: #92400e;
+  --esc-panel-selected-bg: color-mix(in srgb, #3b82f6 8%, transparent);
+  --esc-panel-selected-border: #3b82f6;
+  --esc-panel-primary-bg: #2563eb;
+  --esc-panel-primary-text: #ffffff;
+  --esc-priority-low: #6b7280;
+  --esc-priority-medium: #ca8a04;
+  --esc-priority-high: #ea580c;
+  --esc-priority-urgent: #b31b1b;
+  --esc-sla-ok: #047857;
+  --esc-sla-warn: #a34807;
+  --esc-sla-breach: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --esc-panel-bg: #000000;
+    --esc-panel-sidebar-bg: #0a0a0a;
+    --esc-panel-topbar-bg: rgba(0, 0, 0, 0.8);
+    --esc-panel-surface: rgba(23, 23, 23, 0.6);
+    --esc-panel-surface-alt: #0a0a0a;
+    --esc-panel-border: rgba(255, 255, 255, 0.06);
+    --esc-panel-border-input: rgba(255, 255, 255, 0.1);
+    --esc-panel-text: #ffffff;
+    --esc-panel-text-secondary: #e5e5e5;
+    --esc-panel-text-tertiary: #a3a3a3;
+    --esc-panel-text-muted: #737373;
+    --esc-panel-accent: #06b6d4;
+    --esc-panel-accent-secondary: #8b5cf6;
+    --esc-panel-accent-hover: #22d3ee;
+    --esc-panel-accent-secondary-hover: #a78bfa;
+    --esc-panel-hover: rgba(255, 255, 255, 0.03);
+    --esc-panel-active: rgba(255, 255, 255, 0.08);
+    --esc-panel-note-bg: rgba(245, 158, 11, 0.07);
+    --esc-panel-note-border: rgba(245, 158, 11, 0.28);
+    --esc-panel-note-text: #fbbf24;
+    --esc-panel-selected-bg: color-mix(in srgb, #06b6d4 10%, transparent);
+    --esc-panel-selected-border: #06b6d4;
+    --esc-panel-primary-bg: #06b6d4;
+    --esc-panel-primary-text: #000000;
+    --esc-priority-low: #a3a3a3;
+    --esc-priority-medium: #eab308;
+    --esc-priority-high: #fb923c;
+    --esc-priority-urgent: #f87171;
+    --esc-sla-ok: #34d399;
+    --esc-sla-warn: #fbbf24;
+    --esc-sla-breach: #f87171;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--esc-panel-bg);
+  color: var(--esc-panel-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 13px;
+}
