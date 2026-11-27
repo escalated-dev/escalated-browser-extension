@@ -43,6 +43,11 @@ export function handleMessage(msg: unknown, sender: Sender): Promise<ApiResponse
   if (typeof msg !== 'object' || msg === null) return undefined
   const m = msg as { type?: unknown; call?: unknown; args?: unknown }
   if (m.type === 'api') return callApi(m.call, m.args)
-  if (m.type === 'poll-now') return poll().then(() => ({ ok: true as const }))
+  if (m.type === 'poll-now') {
+    return poll().then(
+      () => ({ ok: true as const }),
+      (): ApiResponse => ({ ok: false, error: { status: 0, message: 'Poll failed' } }),
+    )
+  }
   return undefined
 }

@@ -164,6 +164,8 @@ export function createChromeFake() {
       onInstalled: makeEvent<[{ reason: string }]>(),
     },
     windows: {
+      WINDOW_ID_NONE: -1,
+      onFocusChanged: makeEvent<[number]>(),
       lastFocusedId: 1,
       getLastFocused: vi.fn(async () => ({ id: fake.windows.lastFocusedId })),
     },

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { poll, KEYS } from '../../src/background/poller'
-import { onNotificationClicked } from '../../src/background/notify'
+import { onNotificationClicked, setFocusedWindowId, trackFocusedWindow } from '../../src/background/notify'
 import { getSession, setSession } from '../../src/state/storage'
 import type { Session } from '../../src/api/client'
 import { getChromeFake } from '../setup/chrome'
@@ -18,7 +18,7 @@ const session: Session = {
   meta: {
     api_version: '1.0',
     backend: 'laravel',
-    features: [],
+    features: ['tickets.updated_since', 'tickets.last_customer_reply_at'],
     connect_url: null,
     web_url_template: null,
   } as unknown as Session['meta'],
@@ -40,7 +40,7 @@ const page = (data: unknown[]) => ({ data, meta: {} })
 
 type State = {
   dashboard: () => Response
-  mine: () => Response
+  mine: (u: URL) => Response
   free: () => Response
 }
 let state: State
@@ -57,7 +57,7 @@ beforeEach(async () => {
     const u = new URL(url)
     if (u.pathname.endsWith('/dashboard')) return state.dashboard()
     if (u.searchParams.get('unassigned')) return state.free()
-    return state.mine()
+    return state.mine(u)
   })
   vi.stubGlobal('fetch', fetchMock)
   await setSession(session)
@@ -162,7 +162,7 @@ describe('baseline and notifications', () => {
     expect(notes()).toEqual([])
   })
 
-  it('keeps no persistent state in memory: snapshot, dedupe and lastPollAt are in storage.local', async () => {
+  it('survives a worker restart: state is read from storage.local, not module memory', async () => {
     await poll(T0)
     state.mine = () => json(200, page([ticket('ESC-2')]))
     await poll(at(1))
@@ -170,6 +170,95 @@ describe('baseline and notifications', () => {
       expect.arrayContaining([KEYS.lastPollAt, KEYS.snapshot, KEYS.notified]),
     )
     expect(Object.keys(local()[KEYS.notified] as object)).toEqual(['ESC-2|2026-11-26T10:00:00Z|assigned'])
+    vi.resetModules()
+    const fresh = await import('../../src/background/poller')
+    await fresh.poll(at(2))
+    expect(getChromeFake().notifications.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('keys reply alerts on last_customer_reply_at, so one reply alerts once', async () => {
+    state.mine = () => json(200, page([ticket('ESC-1')]))
+    await poll(T0)
+    const reply = (updated: string) =>
+      json(
+        200,
+        page([ticket('ESC-1', { last_customer_reply_at: '2026-11-26T10:00:30Z', updated_at: updated })]),
+      )
+    state.mine = () => reply('2026-11-26T10:00:30Z')
+    await poll(at(1))
+    state.mine = () => reply('2026-11-26T10:00:33Z')
+    await poll(new Date(at(1).getTime() + 2000))
+    expect(getChromeFake().notifications.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps polling when a notification fails', async () => {
+    await poll(T0)
+    getChromeFake().notifications.create.mockRejectedValueOnce(new Error('no permission'))
+    state.mine = () => json(200, page([ticket('ESC-2')]))
+    await poll(at(1))
+    expect(local()[KEYS.backoff]).toBeUndefined()
+    expect(local()[KEYS.lastPollAt]).toBe(new Date(at(1).getTime() - 5000).toISOString())
+  })
+
+  it('does not run two polls at once: overlapping calls share one set of fetches and one alert', async () => {
+    await poll(T0)
+    state.mine = () => json(200, page([ticket('ESC-2')]))
+    fetchMock.mockClear()
+    await Promise.all([poll(at(1)), poll(at(1))])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(getChromeFake().notifications.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('records an unassigned ticket only when it was known, and ignores unknown ones', async () => {
+    state.mine = () => json(200, page([ticket('ESC-1')]))
+    await poll(T0)
+    state.free = () =>
+      json(200, page([ticket('ESC-1', { assignee: null }), ticket('ESC-8', { assignee: null })]))
+    await poll(at(1))
+    expect(local()[KEYS.snapshot]).toEqual({ 'ESC-1': null })
+  })
+
+  it('pages through the whole assigned listing on the baseline', async () => {
+    state.mine = (u) =>
+      u.searchParams.get('page') === '2'
+        ? json(200, { data: [ticket('ESC-3')], meta: { current_page: 2, last_page: 2 } })
+        : json(200, { data: [ticket('ESC-1')], meta: { current_page: 1, last_page: 2 } })
+    await poll(T0)
+    expect(local()[KEYS.snapshot]).toEqual({ 'ESC-1': '7', 'ESC-3': '7' })
+  })
+
+  it('rebuilds the snapshot hourly so a ticket that left and came back alerts again', async () => {
+    state.mine = () => json(200, page([ticket('ESC-1')]))
+    await poll(T0)
+    // Reassigned away: neither incremental query returns it.
+    state.mine = () => json(200, page([]))
+    await poll(at(30))
+    expect(local()[KEYS.snapshot]).toEqual({ 'ESC-1': '7' })
+    await poll(at(61))
+    expect(local()[KEYS.snapshot]).toEqual({})
+    // And back to me.
+    state.mine = () => json(200, page([ticket('ESC-1', { updated_at: '2026-11-26T11:30:00Z' })]))
+    await poll(at(62))
+    expect(notes().map((n) => n.message)).toEqual(['Assigned to you: #ESC-1 Subject ESC-1'])
+  })
+
+  it('omits updated_since and the unassigned query without the feature, relying on the snapshot', async () => {
+    await setSession({ ...session, meta: { ...session.meta, features: ['tickets.last_customer_reply_at'] } })
+    await poll(T0)
+    state.mine = () => json(200, page([ticket('ESC-2')]))
+    fetchMock.mockClear()
+    await poll(at(1))
+    expect(urls().some((u) => u.includes('updated_since') || u.includes('unassigned'))).toBe(false)
+    expect(notes().map((n) => n.message)).toEqual(['Assigned to you: #ESC-2 Subject ESC-2'])
+  })
+
+  it('skips reply detection without the last_customer_reply_at feature', async () => {
+    await setSession({ ...session, meta: { ...session.meta, features: ['tickets.updated_since'] } })
+    state.mine = () => json(200, page([ticket('ESC-1')]))
+    await poll(T0)
+    state.mine = () => json(200, page([ticket('ESC-1', { last_customer_reply_at: '2026-11-26T10:00:30Z' })]))
+    await poll(at(1))
+    expect(notes()).toEqual([])
   })
 
   it('drops dedupe entries older than 24 hours', async () => {
@@ -209,6 +298,12 @@ describe('429 and backoff', () => {
     expect(getChromeFake().action.badge.text).toBe('3')
   })
 
+  it('waits 60 seconds on a 429 without Retry-After', async () => {
+    state.dashboard = () => json(429, { message: 'Slow down' })
+    await poll(T0)
+    expect((local()[KEYS.backoff] as { until: number }).until).toBe(T0.getTime() + 60_000)
+  })
+
   it('backs off 1, 2, 5, 10, 10 minutes on network errors and resets on success', async () => {
     let fail = true
     fetchMock.mockImplementation(async (url: string) => {
@@ -240,13 +335,37 @@ describe('429 and backoff', () => {
 })
 
 describe('notification click', () => {
-  it('sends open-ticket and opens the side panel for the last focused window', async () => {
+  beforeEach(() => {
+    setFocusedWindowId(undefined)
+    trackFocusedWindow()
+  })
+
+  it('opens the side panel synchronously for the focused window, then sends open-ticket', async () => {
     const c = getChromeFake()
-    c.windows.lastFocusedId = 42
-    await onNotificationClicked('ESC-5')
+    c.windows.onFocusChanged.emit(42)
+    const done = onNotificationClicked('ESC-5')
+    // Called before any await: the click's user gesture is still alive.
     expect(c.sidePanel.open).toHaveBeenCalledWith({ windowId: 42 })
+    await done
     expect(c.runtime.sendMessage).toHaveBeenCalledWith({ type: 'open-ticket', reference: 'ESC-5' })
     expect(c.storage.session.dump().pendingOpen).toBeUndefined()
+  })
+
+  it('ignores WINDOW_ID_NONE focus changes', async () => {
+    const c = getChromeFake()
+    c.windows.onFocusChanged.emit(42)
+    c.windows.onFocusChanged.emit(-1)
+    const done = onNotificationClicked('ESC-5')
+    expect(c.sidePanel.open).toHaveBeenCalledWith({ windowId: 42 })
+    await done
+  })
+
+  it('falls back to getLastFocused when no window id is known yet', async () => {
+    const c = getChromeFake()
+    setFocusedWindowId(undefined)
+    c.windows.lastFocusedId = 9
+    await onNotificationClicked('ESC-5')
+    expect(c.sidePanel.open).toHaveBeenCalledWith({ windowId: 9 })
   })
 
   it('stores pendingOpen when no panel is listening', async () => {

@@ -141,3 +141,40 @@ describe('message router', () => {
     await expect(send('getTicket', 'ESC-1')).rejects.toMatchObject({ status: 404, message: 'Nope' })
   })
 })
+
+describe('worker state', () => {
+  it('poll-now during backoff does not fetch', async () => {
+    await getChromeFake().storage.local.set({ 'poll.backoff': { until: Date.now() + 600_000, step: 1 } })
+    const r = await dispatch({ type: 'poll-now' })
+    expect(r.response).toEqual({ ok: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a new session resets poll state and takes a new silent baseline', async () => {
+    const c = getChromeFake()
+    await c.storage.local.set({
+      'poll.lastPollAt': '2020-01-01T00:00:00.000Z',
+      'poll.snapshot': { OLD: '7' },
+      needsReconnect: true,
+    })
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).endsWith('/dashboard')
+        ? json(200, { stats: { my_assigned: 1 } })
+        : json(200, { data: [{ reference: 'ESC-1', assignee: { id: 7 }, updated_at: 'x' }], meta: {} }),
+    )
+    await setSession(session)
+    await vi.waitFor(() => expect(c.storage.local.dump()['poll.snapshot']).toEqual({ 'ESC-1': '7' }))
+    expect(c.storage.local.dump().needsReconnect).toBeUndefined()
+    expect(c.storage.local.dump()['poll.lastPollAt']).not.toBe('2020-01-01T00:00:00.000Z')
+    expect(c.notifications.create).not.toHaveBeenCalled()
+  })
+
+  it('shows a red "!" at start when a reconnect is pending', async () => {
+    const c = getChromeFake()
+    await c.storage.local.clear()
+    await c.storage.local.set({ needsReconnect: true })
+    c.runtime.onStartup.emit()
+    await vi.waitFor(() => expect(c.action.badge.text).toBe('!'))
+    expect(c.action.badge.color).toBe('#dc2626')
+  })
+})

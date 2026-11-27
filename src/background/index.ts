@@ -1,7 +1,8 @@
 import { getSession } from '../state/storage'
 import { handleMessage } from './router'
-import { onNotificationClicked } from './notify'
-import { ALARM, ensureAlarm, KEYS, poll, resetPollState } from './poller'
+import type { ApiResponse } from './messages'
+import { onNotificationClicked, trackFocusedWindow } from './notify'
+import { ALARM, ensureAlarm, KEYS, poll, resetPollState, setBadgeError } from './poller'
 
 async function init(force: boolean): Promise<void> {
   try {
@@ -9,7 +10,7 @@ async function init(force: boolean): Promise<void> {
     await ensureAlarm(force)
     if (!(await getSession())) {
       const flag = await chrome.storage.local.get(KEYS.needsReconnect)
-      if (flag[KEYS.needsReconnect]) await chrome.action.setBadgeText({ text: '!' })
+      if (flag[KEYS.needsReconnect]) await setBadgeError()
     }
   } catch {
     // Nothing useful to do; the next start retries.
@@ -18,6 +19,7 @@ async function init(force: boolean): Promise<void> {
 
 // Listeners are registered synchronously at the top level (MV3 requirement).
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+trackFocusedWindow()
 
 chrome.runtime.onStartup.addListener(() => void init(true))
 chrome.runtime.onInstalled.addListener(() => void init(true))
@@ -31,7 +33,9 @@ chrome.notifications.onClicked.addListener((id) => void onNotificationClicked(id
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const pending = handleMessage(msg, sender)
   if (!pending) return false
-  void pending.then(sendResponse)
+  void pending
+    .catch((): ApiResponse => ({ ok: false, error: { status: 0, message: 'Worker error' } }))
+    .then(sendResponse)
   return true
 })
 
@@ -43,7 +47,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     await chrome.action.setBadgeText({ text: '' })
     await ensureAlarm(true)
     await poll()
-  })()
+  })().catch(() => undefined)
 })
 
 void init(false)
