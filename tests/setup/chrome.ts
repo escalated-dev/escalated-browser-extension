@@ -157,10 +157,15 @@ export function createChromeFake() {
       onClicked: makeEvent<[unknown, unknown?]>(),
     },
     runtime: {
+      id: 'abcdefghijklmnopabcdefghijklmnop',
       sendMessage: vi.fn<(msg: unknown) => Promise<unknown>>(async () => undefined),
       onMessage: makeEvent<[unknown, unknown, (r?: unknown) => void]>(),
       onStartup: makeEvent<[]>(),
       onInstalled: makeEvent<[{ reason: string }]>(),
+    },
+    windows: {
+      lastFocusedId: 1,
+      getLastFocused: vi.fn(async () => ({ id: fake.windows.lastFocusedId })),
     },
     sidePanel: {
       open: vi.fn<(opts: { tabId?: number; windowId?: number }) => Promise<void>>(async () => undefined),
