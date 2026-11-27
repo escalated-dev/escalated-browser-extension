@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Close as resolved",
+      "actions": [
+        {
+          "type": "status",
+          "value": "resolved"
+        }
+      ],
+      "order": 1
+    }
+  ]
+}

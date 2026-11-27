@@ -1,0 +1,10 @@
+dist/
+dist-e2e/
+test-results/
+playwright-report/
+node_modules/
+.superpowers/
+package-lock.json
+docs/
+*.png
+src/api/schema.d.ts

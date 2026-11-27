@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Escalated",
+  "version": "0.1.0",
+  "description": "Answer Escalated tickets from any tab.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "storage", "alarms", "notifications", "contextMenus", "identity"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Escalated",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

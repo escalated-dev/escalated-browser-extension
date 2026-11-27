@@ -1,0 +1,191 @@
+[
+  {
+    "id": 1,
+    "reference": "ESC-00001",
+    "ticket_type": "question",
+    "subject": "Cannot reset my password",
+    "description": "The reset email never arrives.",
+    "status": "open",
+    "status_label": "Open",
+    "priority": "high",
+    "priority_label": "High",
+    "channel": "web",
+    "metadata": [],
+    "external_reference": null,
+    "requester": {
+      "kind": "contact",
+      "id": 101,
+      "name": "Ada Lovelace",
+      "email": "ada@example.test"
+    },
+    "assignee": {
+      "id": 7,
+      "name": "Sam Agent",
+      "email": "sam@example.test"
+    },
+    "department": {
+      "id": 1,
+      "name": "Support"
+    },
+    "sla_breached": false,
+    "tags": [],
+    "replies": [
+      {
+        "id": 11,
+        "body": "The reset email never arrives.",
+        "is_internal_note": false,
+        "is_pinned": false,
+        "author": {
+          "id": null,
+          "name": "Ada Lovelace",
+          "email": "ada@example.test"
+        },
+        "attachments": [],
+        "created_at": "2026-11-26T09:00:00Z"
+      }
+    ],
+    "activities": [],
+    "sla": {
+      "first_response_due_at": null,
+      "first_response_at": null,
+      "first_response_breached": false,
+      "resolution_due_at": null,
+      "resolution_breached": false
+    },
+    "is_following": false,
+    "followers_count": 0,
+    "custom_actions": [],
+    "resolved_at": null,
+    "closed_at": null,
+    "last_reply_at": "2026-11-26T09:00:00Z",
+    "last_customer_reply_at": "2026-11-26T09:00:00Z",
+    "created_at": "2026-11-25T09:00:00Z",
+    "updated_at": "2026-11-26T09:00:00Z"
+  },
+  {
+    "id": 2,
+    "reference": "ESC-00002",
+    "ticket_type": "question",
+    "subject": "Invoice shows the wrong amount",
+    "description": "I was charged twice.",
+    "status": "open",
+    "status_label": "Open",
+    "priority": "medium",
+    "priority_label": "Medium",
+    "channel": "web",
+    "metadata": [],
+    "external_reference": null,
+    "requester": {
+      "kind": "contact",
+      "id": 102,
+      "name": "Grace Hopper",
+      "email": "grace@example.test"
+    },
+    "assignee": {
+      "id": 7,
+      "name": "Sam Agent",
+      "email": "sam@example.test"
+    },
+    "department": {
+      "id": 1,
+      "name": "Support"
+    },
+    "sla_breached": false,
+    "tags": [],
+    "replies": [
+      {
+        "id": 21,
+        "body": "I was charged twice.",
+        "is_internal_note": false,
+        "is_pinned": false,
+        "author": {
+          "id": null,
+          "name": "Grace Hopper",
+          "email": "grace@example.test"
+        },
+        "attachments": [],
+        "created_at": "2026-11-26T09:00:00Z"
+      }
+    ],
+    "activities": [],
+    "sla": {
+      "first_response_due_at": null,
+      "first_response_at": null,
+      "first_response_breached": false,
+      "resolution_due_at": null,
+      "resolution_breached": false
+    },
+    "is_following": false,
+    "followers_count": 0,
+    "custom_actions": [],
+    "resolved_at": null,
+    "closed_at": null,
+    "last_reply_at": "2026-11-26T09:00:00Z",
+    "last_customer_reply_at": "2026-11-26T09:00:00Z",
+    "created_at": "2026-11-25T09:00:00Z",
+    "updated_at": "2026-11-26T09:00:00Z"
+  },
+  {
+    "id": 3,
+    "reference": "ESC-00003",
+    "ticket_type": "question",
+    "subject": "Export to CSV fails",
+    "description": "The export button does nothing.",
+    "status": "open",
+    "status_label": "Open",
+    "priority": "low",
+    "priority_label": "Low",
+    "channel": "web",
+    "metadata": [],
+    "external_reference": null,
+    "requester": {
+      "kind": "contact",
+      "id": 103,
+      "name": "Alan Turing",
+      "email": "alan@example.test"
+    },
+    "assignee": {
+      "id": 7,
+      "name": "Sam Agent",
+      "email": "sam@example.test"
+    },
+    "department": {
+      "id": 1,
+      "name": "Support"
+    },
+    "sla_breached": false,
+    "tags": [],
+    "replies": [
+      {
+        "id": 31,
+        "body": "The export button does nothing.",
+        "is_internal_note": false,
+        "is_pinned": false,
+        "author": {
+          "id": null,
+          "name": "Alan Turing",
+          "email": "alan@example.test"
+        },
+        "attachments": [],
+        "created_at": "2026-11-26T09:00:00Z"
+      }
+    ],
+    "activities": [],
+    "sla": {
+      "first_response_due_at": null,
+      "first_response_at": null,
+      "first_response_breached": false,
+      "resolution_due_at": null,
+      "resolution_breached": false
+    },
+    "is_following": false,
+    "followers_count": 0,
+    "custom_actions": [],
+    "resolved_at": null,
+    "closed_at": null,
+    "last_reply_at": "2026-11-26T09:00:00Z",
+    "last_customer_reply_at": "2026-11-26T09:00:00Z",
+    "created_at": "2026-11-25T09:00:00Z",
+    "updated_at": "2026-11-26T09:00:00Z"
+  }
+]

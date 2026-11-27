@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "id": 7,
+      "name": "Sam Agent",
+      "email": "sam@example.test"
+    },
+    {
+      "id": 8,
+      "name": "Robin Agent",
+      "email": "robin@example.test"
+    }
+  ]
+}

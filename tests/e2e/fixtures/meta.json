@@ -1,0 +1,17 @@
+{
+  "api_version": "1.0",
+  "backend": "laravel",
+  "features": [
+    "tickets.create",
+    "tickets.macro",
+    "tickets.updated_since",
+    "tickets.last_customer_reply_at",
+    "tickets.open_filter",
+    "canned_responses",
+    "macros",
+    "auth.exchange",
+    "auth.revoke"
+  ],
+  "connect_url": "{origin}/support/agent/connect-extension",
+  "web_url_template": "{origin}/support/agent/tickets/{reference}"
+}
