@@ -1,4 +1,4 @@
-﻿import { renameSync } from 'node:fs'
+import { renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
