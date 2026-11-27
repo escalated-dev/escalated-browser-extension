@@ -43,7 +43,8 @@ const makeTicket = (over: Partial<Ticket> = {}): Ticket =>
     replies: [
       {
         id: 3,
-        body: 'Newest <b>reply</b>\nsecond line',
+        // HTML as Laravel stores it for HTML-only inbound email.
+        body: '<p>Newest <b>reply</b><br>second line <img src="x" onerror="alert(1)"></p>',
         is_internal_note: false,
         is_pinned: false,
         author: { id: 7, name: 'Ada' },
@@ -59,7 +60,7 @@ const makeTicket = (over: Partial<Ticket> = {}): Ticket =>
       },
       {
         id: 1,
-        body: 'Oldest',
+        body: 'Oldest\nline <two> & more',
         is_internal_note: false,
         is_pinned: false,
         author: null,
@@ -195,9 +196,9 @@ describe('Thread', () => {
     const w = await open()
     const items = w.findAll('.message')
     expect(items.map((i) => i.find('.body').text())).toEqual([
-      'Oldest',
+      'Oldest\nline <two> & more',
       'Secret note',
-      'Newest <b>reply</b>\nsecond line',
+      'Newest reply\nsecond line',
     ])
     expect(items[1]!.classes()).toContain('note')
     expect(items[1]!.text()).toContain('Internal note')
@@ -208,12 +209,15 @@ describe('Thread', () => {
     expect(scrolled.at(-1)).toBe(items[2]!.element)
   })
 
-  it('renders bodies as text, never as markup', async () => {
+  it('renders bodies as text, never as markup: an HTML body becomes text with its line breaks', async () => {
     const w = await open()
     const body = w.findAll('.message')[2]!.find('.body')
     expect(body.find('b').exists()).toBe(false)
-    expect(body.element.textContent).toBe('Newest <b>reply</b>\nsecond line')
+    expect(body.find('img').exists()).toBe(false)
+    expect(body.element.textContent).toBe('Newest reply\nsecond line')
     expect(body.classes()).toContain('body')
+    // Plain text stays exactly as sent, angle brackets included.
+    expect(w.findAll('.message')[0]!.find('.body').element.textContent).toBe('Oldest\nline <two> & more')
   })
 
   it('scrolls again when a newer reply arrives after a send', async () => {

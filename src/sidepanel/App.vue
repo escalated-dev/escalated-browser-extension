@@ -3,8 +3,10 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Session } from '@/api/client'
 import { PENDING_OPEN_KEY } from '@/background/notify'
 import { PENDING_CREATE_KEY } from '@/background/contextMenu'
-import type { OpenTicketMessage } from '@/background/messages'
-import { getSession } from '@/state/storage'
+import { refreshMetaNow, type OpenTicketMessage } from '@/background/messages'
+import { KEYS } from '@/background/poller'
+import { en } from '@/i18n/en'
+import { getSession, LAST_ADDRESS_KEY } from '@/state/storage'
 import PanelHeader from './components/PanelHeader.vue'
 import ConnectView from './views/ConnectView.vue'
 import QueueView from './views/QueueView.vue'
@@ -13,14 +15,15 @@ import TicketView from './views/TicketView.vue'
 import { openTicket, router, showCreate, showQueue } from './router'
 
 const PENDING_MAX_AGE_MS = 2 * 60 * 1000
-const LAST_ADDRESS_KEY = 'lastAddress'
 
 const loaded = ref(false)
 const session = ref<Session | null>(null)
 const needsReconnect = ref(false)
+const forbidden = ref(false)
 const lastAddress = ref('')
 
-// The worker clears storage on a 401, so the last address is kept here in the panel.
+// The worker clears storage on a 401, so the last address is kept here in the panel. An explicit
+// Disconnect deletes it (src/auth/connect.ts).
 function readLastAddress(): string {
   try {
     return localStorage.getItem(LAST_ADDRESS_KEY) ?? ''
@@ -38,10 +41,15 @@ function rememberAddress(origin: string): void {
 }
 
 async function refresh(): Promise<void> {
-  const [s, flag] = await Promise.all([getSession(), chrome.storage.local.get('needsReconnect')])
+  const [s, flags] = await Promise.all([
+    getSession(),
+    chrome.storage.local.get([KEYS.needsReconnect, KEYS.forbidden]),
+  ])
   session.value = s
-  needsReconnect.value = flag['needsReconnect'] === true
+  needsReconnect.value = flags[KEYS.needsReconnect] === true
+  forbidden.value = s !== null && flags[KEYS.forbidden] === true
   if (s) rememberAddress(s.origin)
+  else lastAddress.value = readLastAddress()
   loaded.value = true
 }
 
@@ -56,6 +64,8 @@ function onConnected(s: Session): void {
 function onDisconnected(): void {
   session.value = null
   needsReconnect.value = false
+  forbidden.value = false
+  lastAddress.value = readLastAddress()
   showQueue()
 }
 
@@ -102,7 +112,12 @@ function onMessage(
 
 type Changes = Record<string, { newValue?: unknown }>
 function onStorage(changes: Changes, area: string): void {
-  if (area === 'local' && ('session' in changes || 'needsReconnect' in changes)) void refresh()
+  if (
+    area === 'local' &&
+    ('session' in changes || KEYS.needsReconnect in changes || KEYS.forbidden in changes)
+  ) {
+    void refresh()
+  }
   if (area === 'session' && changes[PENDING_OPEN_KEY]?.newValue) {
     void consumePending(changes[PENDING_OPEN_KEY].newValue)
   }
@@ -116,6 +131,8 @@ onMounted(() => {
   chrome.runtime.onMessage.addListener(onMessage)
   chrome.storage.onChanged.addListener(onStorage)
   void refresh().then(async () => {
+    // Features may have changed since the connect; the worker re-reads /meta.
+    if (session.value) void refreshMetaNow().catch(() => undefined)
     await consumePending()
     await consumePendingCreate()
   })
@@ -137,6 +154,7 @@ onBeforeUnmount(() => {
       />
       <template v-else>
         <PanelHeader :session="session" @disconnected="onDisconnected" />
+        <p v-if="forbidden" class="banner" role="alert">{{ en.panel.forbidden }}</p>
         <KeepAlive>
           <QueueView v-if="router.view === 'queue'" :session="session" @open="openTicket" />
         </KeepAlive>
@@ -164,5 +182,12 @@ onBeforeUnmount(() => {
   color: var(--esc-panel-text);
   background: var(--esc-panel-bg);
   font-size: 13px;
+}
+.banner {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--esc-sla-breach);
+  border-bottom: 1px solid var(--esc-panel-border);
 }
 </style>

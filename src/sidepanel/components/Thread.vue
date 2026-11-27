@@ -6,6 +6,7 @@ export default { name: 'TicketThread' }
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { Reply } from '@/api/client'
 import { en } from '@/i18n/en'
+import { bodyText } from '../bodyText'
 import { relativeTime } from '../time'
 
 const props = defineProps<{ replies: Reply[]; requesterName: string }>()
@@ -39,7 +40,7 @@ watch(newestId, toBottom)
         <span v-if="r.is_internal_note" class="tag">{{ en.ticket.internalNote }}</span>
         <time class="time" :datetime="r.created_at">{{ relativeTime(r.created_at) }}</time>
       </header>
-      <div class="body">{{ r.body }}</div>
+      <div class="body">{{ bodyText(r.body) }}</div>
     </article>
   </section>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, ref, watch } from 'vue'
-import type { Session, TicketListItem, TicketQuery } from '@/api/client'
+import type { Session, TicketListItem, TicketQuery, TicketStatus } from '@/api/client'
 import { send } from '@/background/messages'
 import { en } from '@/i18n/en'
 import TicketRow from '../components/TicketRow.vue'
@@ -15,7 +15,28 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'open', label: en.queue.open },
 ]
 
+// The contract's statuses, in its order. "default" means open tickets where the helpdesk can
+// filter by the open family (tickets.open_filter), and no status filter otherwise.
+const STATUSES: TicketStatus[] = [
+  'open',
+  'in_progress',
+  'waiting_on_customer',
+  'waiting_on_agent',
+  'escalated',
+  'resolved',
+  'closed',
+  'reopened',
+  'live',
+]
+type StatusFilter = 'default' | TicketStatus
+const openFilter = computed(() => props.session.meta.features.includes('tickets.open_filter'))
+const statusOptions = computed(() => [
+  { value: 'default' as StatusFilter, label: openFilter.value ? en.queue.anyOpenStatus : en.queue.anyStatus },
+  ...STATUSES.map((s) => ({ value: s as StatusFilter, label: en.ticket.statuses[s] })),
+])
+
 const tab = ref<Tab>('mine')
+const status = ref<StatusFilter>('default')
 const search = ref('')
 const term = ref('')
 const items = ref<TicketListItem[]>([])
@@ -32,7 +53,10 @@ const query = (): TicketQuery => {
       ? { assigned_to: props.session.user.id as TicketQuery['assigned_to'] }
       : tab.value === 'unassigned'
         ? { unassigned: true }
-        : { status: 'open' }
+        : {}
+  if (status.value !== 'default') q.status = status.value
+  else if (openFilter.value) q.open = true
+  else if (tab.value === 'open') q.status = 'open'
   if (term.value) q.search = term.value
   return q
 }
@@ -64,6 +88,10 @@ function reload(): void {
 
 watch(tab, reload, { immediate: true })
 watch(term, reload)
+watch(status, reload)
+watch(openFilter, () => {
+  if (status.value === 'default') reload()
+})
 watch(search, (v) => {
   clearTimeout(timer)
   timer = setTimeout(() => {
@@ -82,6 +110,7 @@ onActivated(() => {
 const hasMore = computed(() => page.value < lastPage.value)
 const empty = computed(() => {
   if (term.value) return en.queue.emptySearch
+  if (status.value !== 'default') return en.queue.emptyStatus
   return tab.value === 'mine'
     ? en.queue.emptyMine
     : tab.value === 'unassigned'
@@ -113,6 +142,10 @@ const empty = computed(() => {
         autocomplete="off"
         :placeholder="en.queue.searchPlaceholder"
       />
+      <label class="sr" for="queue-status">{{ en.queue.statusLabel }}</label>
+      <select id="queue-status" v-model="status">
+        <option v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+      </select>
     </div>
 
     <p v-if="failed" class="state error" role="alert">
@@ -154,16 +187,20 @@ const empty = computed(() => {
 .tab:focus-visible,
 .more:focus-visible,
 .link:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--esc-panel-accent);
   outline-offset: -2px;
 }
 .search {
+  display: flex;
+  gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--esc-panel-border);
 }
-.search input {
-  width: 100%;
+.search input,
+.search select {
+  min-width: 0;
   box-sizing: border-box;
   padding: 5px 8px;
   font: inherit;
@@ -172,6 +209,13 @@ input:focus-visible {
   background: var(--esc-panel-surface);
   border: 1px solid var(--esc-panel-border-input);
   border-radius: 6px;
+}
+.search input {
+  flex: 1;
+}
+.search select {
+  flex: 0 1 auto;
+  max-width: 45%;
 }
 .sr {
   position: absolute;

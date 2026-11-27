@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import QueueView from '../../src/sidepanel/views/QueueView.vue'
 import App from '../../src/sidepanel/App.vue'
@@ -189,6 +189,62 @@ describe('QueueView', () => {
   })
 })
 
+describe('QueueView status filter (E4)', () => {
+  const withOpen: Session = {
+    ...session,
+    meta: { ...session.meta, features: ['tickets.open_filter'] },
+  }
+
+  it('with tickets.open_filter, every tab asks for open tickets by default', async () => {
+    const w = mount(QueueView, { props: { session: withOpen } })
+    await flushPromises()
+    expect(listArgs()[0]).toEqual({ assigned_to: 7, open: true, page: 1 })
+    const tabs = w.findAll('button.tab')
+    await tabs[1]!.trigger('click')
+    await flushPromises()
+    expect(listArgs()[1]).toEqual({ unassigned: true, open: true, page: 1 })
+    await tabs[2]!.trigger('click')
+    await flushPromises()
+    expect(listArgs()[2]).toEqual({ open: true, page: 1 })
+    expect(w.find('select#queue-status option').text()).toBe('Any open status')
+  })
+
+  it('offers each contract status and filters by it instead of the open family', async () => {
+    const w = mount(QueueView, { props: { session: withOpen } })
+    await flushPromises()
+    const select = w.find('select#queue-status')
+    expect(select.findAll('option').map((o) => o.text())).toEqual([
+      'Any open status',
+      'Open',
+      'In progress',
+      'Waiting on customer',
+      'Waiting on agent',
+      'Escalated',
+      'Resolved',
+      'Closed',
+      'Reopened',
+      'Live',
+    ])
+    await select.setValue('resolved')
+    await flushPromises()
+    expect(listArgs().at(-1)).toEqual({ assigned_to: 7, status: 'resolved', page: 1 })
+    expect(w.find('.state').text()).toBe('No tickets with that status.')
+    await w.findAll('button.tab')[2]!.trigger('click')
+    await flushPromises()
+    expect(listArgs().at(-1)).toEqual({ status: 'resolved', page: 1 })
+  })
+
+  it('without the feature, keeps the old queries and says "Any status"', async () => {
+    const w = mount(QueueView, { props: { session } })
+    await flushPromises()
+    expect(listArgs()[0]).toEqual({ assigned_to: 7, page: 1 })
+    expect(w.find('select#queue-status option').text()).toBe('Any status')
+    await w.find('select#queue-status').setValue('waiting_on_customer')
+    await flushPromises()
+    expect(listArgs().at(-1)).toEqual({ assigned_to: 7, status: 'waiting_on_customer', page: 1 })
+  })
+})
+
 describe('relativeTime', () => {
   const now = Date.parse('2026-06-01T12:00:00Z')
   it('formats past times', () => {
@@ -276,5 +332,71 @@ describe('App', () => {
     await flushPromises()
     expect(router.currentReference).toBe('ESC-9')
     expect(getChromeFake().storage.session.dump()).toEqual({})
+  })
+})
+
+describe('App: worker state in the panel', () => {
+  const storeSession = () => getChromeFake().storage.local.set({ session })
+  afterEach(() => {
+    try {
+      localStorage.clear()
+    } catch {
+      // jsdom only
+    }
+  })
+
+  it('asks the worker to re-read /meta when the panel opens connected (M10)', async () => {
+    await storeSession()
+    mount(App)
+    await flushPromises()
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'refresh-meta' })
+  })
+
+  it('does not ask for /meta when signed out', async () => {
+    mount(App)
+    await flushPromises()
+    expect(sendMessage).not.toHaveBeenCalledWith({ type: 'refresh-meta' })
+  })
+
+  it('shows the refusal banner while the worker reports a 403, and hides it after (M14)', async () => {
+    await storeSession()
+    await getChromeFake().storage.local.set({ 'poll.forbidden': true })
+    const w = mount(App)
+    await flushPromises()
+    expect(w.find('.banner').text()).toBe('The helpdesk refused access. Reconnect or ask your admin.')
+    await getChromeFake().storage.local.remove('poll.forbidden')
+    await flushPromises()
+    expect(w.find('.banner').exists()).toBe(false)
+  })
+
+  it('keeps the address for a reconnect after a 401 (E7)', async () => {
+    await storeSession()
+    const w = mount(App)
+    await flushPromises()
+    expect(localStorage.getItem('lastAddress')).toBe('https://help.test')
+    // The worker's 401 path: session gone, reconnect flagged, the panel's localStorage untouched.
+    await getChromeFake().storage.local.clear()
+    await getChromeFake().storage.local.set({ needsReconnect: true })
+    await flushPromises()
+    expect((w.find('#address').element as HTMLInputElement).value).toBe('https://help.test')
+  })
+
+  it('an explicit Disconnect leaves the connect form empty (E7)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 204 })),
+    )
+    onTestFinished(() => {
+      vi.unstubAllGlobals()
+    })
+    await storeSession()
+    const w = mount(App)
+    await flushPromises()
+    await w.find('button.quiet').trigger('click')
+    await w.find('button.danger').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => expect(w.find('#address').exists()).toBe(true))
+    expect((w.find('#address').element as HTMLInputElement).value).toBe('')
+    expect(localStorage.getItem('lastAddress')).toBeNull()
   })
 })
