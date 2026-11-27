@@ -120,6 +120,49 @@ describe('context menu click', () => {
     expect(p.selection).toBe('')
   })
 
+  const titleOf = async (info: object, t: object | undefined) => {
+    const c = getChromeFake()
+    mod.registerContextMenu()
+    click({ menuItemId: 'create-ticket', ...info }, t)
+    await settle()
+    return (await c.storage.session.get('pendingCreate')).pendingCreate as { title: string; url: string }
+  }
+
+  it('uses the page url from the click info when the tab has no url or title', async () => {
+    const p = await titleOf(
+      { pageUrl: 'https://shop.test/x', selectionText: 'hi' },
+      { id: 1, title: '', url: '' },
+    )
+    expect(p.url).toBe('https://shop.test/x')
+  })
+
+  it('falls back to the first non-empty selection line (max 255) when the tab title is scrubbed', async () => {
+    const sel = ['', '  ', '  First line here  ', 'second line'].join('\n')
+    expect((await titleOf({ pageUrl: 'https://shop.test/x', selectionText: sel }, { id: 1 })).title).toBe(
+      'First line here',
+    )
+    expect(
+      (await titleOf({ pageUrl: 'https://shop.test/x', selectionText: 'y'.repeat(400) }, { id: 1 })).title,
+    ).toHaveLength(255)
+  })
+
+  it('falls back to the page hostname when there is no title and no selection', async () => {
+    expect((await titleOf({ pageUrl: 'https://shop.test/x?q=1' }, { id: 1, title: '  ' })).title).toBe(
+      'shop.test',
+    )
+  })
+
+  it('leaves the title empty for non-http pages with nothing else', async () => {
+    expect((await titleOf({ pageUrl: 'chrome://settings' }, { id: 1 })).title).toBe('')
+  })
+
+  it('prefers the tab title when present', async () => {
+    expect(
+      (await titleOf({ pageUrl: 'https://a.test/', selectionText: 'sel' }, { id: 1, title: 'Real title' }))
+        .title,
+    ).toBe('Real title')
+  })
+
   it('still stores the pending create when there is no tab id', async () => {
     const c = getChromeFake()
     mod.registerContextMenu()

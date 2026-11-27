@@ -138,6 +138,18 @@ describe('CreateView submit', () => {
     expect(router.currentReference).toBe('ESC-42')
   })
 
+  it('sends the typed requester name when filled', async () => {
+    const w = await open()
+    await fill(w)
+    await w.find('input.name').setValue('  Grace Hopper ')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect((calls('createTicket')[0]![0] as { requester: unknown }).requester).toEqual({
+      name: 'Grace Hopper',
+      email: 'cust@x.test',
+    })
+  })
+
   it('omits priority and department when left at their defaults', async () => {
     const w = await open()
     await fill(w)

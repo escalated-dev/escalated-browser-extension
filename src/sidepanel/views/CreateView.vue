@@ -13,7 +13,7 @@ const DESCRIPTION_MAX = 65535
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PRIORITIES = ['low', 'medium', 'high', 'urgent', 'critical'] as const
 
-type Field = 'subject' | 'description' | 'email' | 'priority' | 'department'
+type Field = 'subject' | 'description' | 'email' | 'name' | 'priority' | 'department'
 
 function initialDescription(): string {
   const parts = [props.prefill?.selection?.trim() ?? '', props.prefill?.url ?? ''].filter(Boolean)
@@ -24,6 +24,7 @@ const form = reactive({
   subject: (props.prefill?.title ?? '').trim().slice(0, SUBJECT_MAX),
   description: initialDescription(),
   email: '',
+  name: '',
   priority: '',
   department: '',
 })
@@ -63,7 +64,7 @@ const FIELD_FOR_KEY: Record<string, Field> = {
   description: 'description',
   requester: 'email',
   'requester.email': 'email',
-  'requester.name': 'email',
+  'requester.name': 'name',
   priority: 'priority',
   department_id: 'department',
 }
@@ -87,7 +88,7 @@ async function submit(): Promise<void> {
   const body: CreateTicketInput = {
     subject: form.subject.trim().slice(0, SUBJECT_MAX),
     description: form.description,
-    requester: { name: email.split('@')[0] ?? email, email },
+    requester: { name: form.name.trim() || (email.split('@')[0] ?? email), email },
   }
   if (form.priority) body.priority = form.priority as (typeof PRIORITIES)[number]
   if (form.department) body.department_id = Number(form.department)
@@ -153,6 +154,12 @@ async function submit(): Promise<void> {
         :aria-invalid="errors.email ? 'true' : undefined"
       />
       <p v-if="errors.email" class="field-error" role="alert">{{ errors.email }}</p>
+    </div>
+
+    <div class="field" data-field="name">
+      <label for="create-name">{{ en.create.name }}</label>
+      <input id="create-name" v-model="form.name" class="name" type="text" autocomplete="off" />
+      <p v-if="errors.name" class="field-error" role="alert">{{ errors.name }}</p>
     </div>
 
     <div class="row">

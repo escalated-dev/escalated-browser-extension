@@ -122,6 +122,7 @@ export const en = {
     subject: 'Subject',
     description: 'Description',
     email: 'Requester email',
+    name: 'Requester name (optional)',
     priority: 'Priority',
     priorityDefault: 'Default',
     department: 'Department',

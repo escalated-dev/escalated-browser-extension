@@ -43,13 +43,26 @@ function httpUrl(raw: string | undefined): string {
   }
 }
 
-export function buildPending(info: MenuInfo, tab: MenuTab | undefined): PendingCreate {
-  return {
-    selection: (info.selectionText ?? '').slice(0, SELECTION_MAX),
-    title: tab?.title ?? '',
-    url: httpUrl(info.pageUrl ?? tab?.url),
-    at: Date.now(),
+/** Chrome scrubs tab.title without host access: fall back to the selection, then the hostname. */
+function pickTitle(tabTitle: string | undefined, selection: string, url: string): string {
+  const own = (tabTitle ?? '').trim()
+  if (own) return own
+  const line = selection
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l !== '')
+  if (line) return line.slice(0, 255)
+  try {
+    return url ? new URL(url).hostname : ''
+  } catch {
+    return ''
   }
+}
+
+export function buildPending(info: MenuInfo, tab: MenuTab | undefined): PendingCreate {
+  const selection = (info.selectionText ?? '').slice(0, SELECTION_MAX)
+  const url = httpUrl(info.pageUrl ?? tab?.url)
+  return { selection, title: pickTitle(tab?.title, selection, url), url, at: Date.now() }
 }
 
 function onMenuClicked(info: MenuInfo, tab?: MenuTab): void {
