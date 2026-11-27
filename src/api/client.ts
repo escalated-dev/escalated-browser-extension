@@ -177,6 +177,9 @@ function sameOrigin(value: unknown, origin: string): string | null {
 
 /** Drops connect_url and web_url_template unless they share the API base's origin. */
 export function sanitiseMeta(raw: Schemas['Meta'], apiBase: string): Meta {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('Invalid meta response')
+  }
   const origin = new URL(apiBase).origin
   return {
     ...raw,
