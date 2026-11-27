@@ -1,4 +1,4 @@
-# Development
+﻿# Development
 
 ## Setup
 
@@ -17,6 +17,7 @@ npm run build
 | `npm run build` | Production build into `dist/` |
 | `npm run build:e2e` | Test build into `dist-e2e/` (see End-to-end tests) |
 | `npm run zip` | Zips `dist/` into `escalated-browser-extension-<version>.zip` |
+| `npm run check:dist` | Fails if `dist/` has e2e host permissions, content scripts, or localhost addresses |
 | `npm run lint` | ESLint and Prettier check |
 | `npm run typecheck` | `vue-tsc` |
 | `npm test` | Unit tests (Vitest) |

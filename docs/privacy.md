@@ -17,7 +17,11 @@ Escalated for Chrome is a side panel for helpdesk agents. This page says what it
 
 ## Page content
 
-The extension does not read web pages. The one exception is the right-click item "Create Escalated ticket". When you choose it, the extension reads the selected text, the page title and the page address, and puts them into the new ticket form. They go to your helpdesk only if you press the button to create the ticket.
+The extension does not read web pages. The one exception is the right-click item "Create Escalated ticket". When you choose it, the extension reads the selected text, the page title and the page address, and puts them into the new ticket form. This capture is held in the browser's session storage until the create form opens or the browser closes, whichever is first. It goes to your helpdesk only if you press the button to create the ticket.
+
+## Data disclosure
+
+For the store's data disclosure: ticket content (including anything you type into a reply or a new ticket) and the agent's identity (name and email) go only to the helpdesk you connect, and nowhere else.
 
 ## Permissions
 

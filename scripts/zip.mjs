@@ -1,7 +1,7 @@
-// Zips dist/ into escalated-browser-extension-<version>.zip using the system tar
-// (bsdtar on Windows and macOS writes zip with -a), so no extra dependency is needed.
-import { readFileSync, rmSync, existsSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+// Zips dist/ into escalated-browser-extension-<version>.zip with a built-in writer, so it
+// needs no system zip or tar and behaves the same everywhere.
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { buildZip, listFiles, listZipEntries } from './zip-lib.mjs'
 
 if (!existsSync('dist/manifest.json')) {
   console.error('dist/ is missing. Run npm run build first.')
@@ -10,6 +10,20 @@ if (!existsSync('dist/manifest.json')) {
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
 const out = `escalated-browser-extension-${version}.zip`
 rmSync(out, { force: true })
-const res = spawnSync('tar', ['-a', '-c', '-f', out, '-C', 'dist', '.'], { stdio: 'inherit' })
-if (res.status !== 0) process.exit(res.status ?? 1)
-console.log(`Wrote ${out}`)
+const zip = buildZip('dist')
+writeFileSync(out, zip)
+
+// Check what was written, not what was built.
+const written = readFileSync(out)
+const expected = listFiles('dist')
+const actual = listZipEntries(written)
+if (
+  written.readUInt32LE(0) !== 0x04034b50 ||
+  actual.length !== expected.length ||
+  actual.some((n, i) => n !== expected[i])
+) {
+  rmSync(out, { force: true })
+  console.error('Zip check failed: entries do not match dist/.')
+  process.exit(1)
+}
+console.log(`Wrote ${out} (${actual.length} files)`)
