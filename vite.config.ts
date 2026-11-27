@@ -19,6 +19,7 @@ const renameSidepanelHtml = (): Plugin => ({
 
 // Test-only build (npm run build:e2e): the manifest also lists the local hosts the mock
 // helpdesk runs on, so chrome.permissions.request resolves without a prompt. No code differs.
+// As required hosts they cannot be removed, so the suite checks the Disconnect order itself.
 const e2eManifest = (): Plugin => ({
   name: 'e2e-manifest',
   apply: 'build',

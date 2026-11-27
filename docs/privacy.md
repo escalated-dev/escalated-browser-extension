@@ -10,10 +10,18 @@ Escalated for Chrome is a side panel for helpdesk agents. This page says what it
 
 ## What is stored, and where
 
-- When you connect, the extension keeps your access token, your name and email, and the helpdesk address in the browser's local extension storage on this device.
-- That storage is not synced. The token does not leave this browser profile, and it is never put in a URL or written to a log.
-- Short reply drafts are kept in session storage and are cleared when the browser closes.
-- Your queue and tickets are fetched when needed. Beyond that, only ticket references and timestamps are kept, so notifications can spot new work.
+In the browser's local extension storage, on this device:
+
+- your access token, your name and email, the helpdesk address, and what the helpdesk says about itself (which features it supports, the link pattern for its ticket pages);
+- for notifications: the reference of each ticket the extension has seen assigned to you or unassigned, and when it last saw it (at most 2,000 entries); which alerts it has already shown, kept for 24 hours; and when it last checked.
+
+That storage is not synced. The token does not leave this browser profile, and it is never put in a URL or written to a log.
+
+In the browser's session storage, which Chrome empties when the browser closes: reply drafts, a ticket you clicked in a notification before the panel opened, and the right-click capture described below.
+
+In the side panel's own page storage: the address of the last helpdesk you connected, so the form is filled in if your session ends and you need to reconnect.
+
+Your queue and tickets are fetched when needed and not kept.
 
 ## Page content
 
@@ -21,15 +29,27 @@ The extension does not read web pages. The one exception is the right-click item
 
 ## Data disclosure
 
-For the store's data disclosure: ticket content (including anything you type into a reply or a new ticket) and the agent's identity (name and email) go only to the helpdesk you connect, and nowhere else.
+For the store's data disclosure:
+
+- Collected: personally identifiable information (the agent's name and email), authentication information (the access token), personal communications (ticket messages you read and write), and website content (only the selected text, title and address of a page, when you use the right-click item).
+- Not collected: health, financial or payment information, location, web history, and user activity such as clicks or keystrokes.
+- All of it goes only to the helpdesk you connect. It is not sold, not transferred to third parties, not used for anything other than the extension's single purpose, and not used to determine creditworthiness or for lending.
 
 ## Permissions
 
-The extension asks Chrome for access to your helpdesk's address only, at the moment you connect. It has no access to other sites.
+Chrome asks you to allow access to your helpdesk's address when you choose Connect. The extension asks only for the one address you typed. After a successful connect it gives up access to any other site address it was allowed before, so only the connected helpdesk remains. It has no access to other sites.
 
 ## Disconnect and revoke
 
-Choose Disconnect in the panel header. The extension asks the helpdesk to revoke its token, deletes everything it stored, and gives up its access to the helpdesk address. You can also revoke the token from your helpdesk, on the browser extensions page of your agent account, or ask your admin to remove it.
+Choose Disconnect in the panel header. The extension:
+
+1. asks the helpdesk to revoke its token, while it still has access to the helpdesk address;
+2. deletes everything in its local storage and session storage, and the remembered helpdesk address;
+3. once the helpdesk has answered, or after five seconds, gives up its access to the helpdesk address.
+
+If the helpdesk could not be reached, the token may still be valid there. You can always revoke it from your helpdesk, on the browser extensions page of your agent account, or ask your admin to remove it.
+
+When the helpdesk rejects the token (for example, you revoked it there), the extension deletes the token and everything in its local storage, shows a red "!" on its icon and asks you to reconnect. The remembered address is kept so you do not have to type it again.
 
 Removing the extension from Chrome deletes its stored data as well. If you remove it without disconnecting, revoke the token from your helpdesk.
 

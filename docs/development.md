@@ -1,4 +1,4 @@
-﻿# Development
+# Development
 
 ## Setup
 
@@ -57,7 +57,11 @@ It runs headless. Set `E2E_HEADED=1` to watch it; on a Linux machine without a d
 
 `npm run build:e2e` writes `dist-e2e/`. Its manifest is the production one plus `host_permissions` for `http://localhost/*` and `http://127.0.0.1/*`, so `chrome.permissions.request` resolves without a prompt. The code is identical. The production build has no `host_permissions`, and a unit test checks that `dist/` does not contain the e2e additions.
 
-Flows covered: the service worker starts without errors and the toolbar button is set to open the side panel; sign in through the helpdesk connect page (`launchWebAuthFlow`); the queue; opening a ticket; sending a reply; the badge count after a poll; disconnect with token revocation.
+Because those hosts are required permissions in the e2e build, Disconnect cannot actually cut the panel off from the mock there. The suite checks the order instead: it records when the panel calls `chrome.permissions.remove` for the helpdesk origin, the mock records when the revoke arrived and answers it 300 ms later, and the test asserts the removal came after that answer. A unit test checks the same order against the Chrome fake.
+
+The mock's `/meta` lists `tickets.updated_since`, `tickets.last_customer_reply_at` and `tickets.open_filter`, like Laravel, so the poller takes its incremental path (`open=1`, `updated_since`) after the first poll.
+
+Flows covered: the service worker starts without errors and the toolbar button is set to open the side panel; sign in through the helpdesk connect page (`launchWebAuthFlow`); the queue; the badge count after a poll; an "Assigned to you" and a "Customer replied" alert from the incremental poll (checked through the poller's alert record, since headless Chromium may not keep notifications); opening a ticket; sending a reply; disconnect with token revocation before the host permission goes, and empty storage after.
 
 The service worker and the reply path are also covered by unit tests, which run without a browser.
 
@@ -66,7 +70,7 @@ The service worker and the reply path are also covered by unit tests, which run 
 1. Update `version` in `package.json` and `public/manifest.json` (a unit test checks they match).
 2. Tag the commit `v<version>` and push the tag.
 3. The Release workflow runs the tests, builds, zips and attaches the zip to the GitHub release.
-4. The owner uploads the zip to the Chrome Web Store. `docs/privacy.md` is the privacy policy for the listing.
+4. The owner uploads the zip to the Chrome Web Store. `docs/privacy.md` is the privacy policy for the listing, and `docs/store-listing.md` has the single-purpose statement, permission justifications and data disclosure answers.
 
 ## Pre-submission checklist
 
@@ -78,3 +82,6 @@ Before the first store submission, the owner checks the extension by hand agains
 - [ ] Create a ticket from a page with the right-click item.
 - [ ] Revoke the token from the helpdesk and confirm the panel asks to reconnect and the badge shows "!".
 - [ ] Open the browser extensions page of the agent account, confirm the token is listed, then confirm Disconnect removes it.
+- [ ] In Chrome 116 (the oldest supported version), from the real side panel, not a tab: the permission prompt appears on Connect, and `launchWebAuthFlow` opens the sign-in page and returns to the panel.
+- [ ] After Disconnect, reload the helpdesk's Browser extensions page and confirm the token is gone (not just hidden in the panel).
+- [ ] Stop the service worker (`chrome://serviceworker-internals`, Stop), then click a notification: the side panel opens on that ticket.

@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 
 const API = '/support/api/v1'
 export const MANUAL_TOKEN = 'e2e-manual-token'
+export const REVOKE_DELAY_MS = 300
 const REDIRECT = /^https:\/\/[a-p]{32}\.chromiumapp\.org\/$/
 
 const fixture = <T>(name: string): T =>
@@ -19,11 +20,17 @@ export type Mock = {
   url: string
   /** Every API request, in order, as "METHOD path". */
   requests: string[]
+  /** The query of every GET /tickets, in order. */
+  listQueries: URLSearchParams[]
   tickets: Ticket[]
   revoked: string[]
+  /** When each revoke request arrived (Date.now() on this machine). */
+  revokedAt: number[]
   exchanges: number
   /** Test helper: a new ticket assigned to the signed-in agent. */
   addAssignedTicket(subject: string): void
+  /** Test helper: the requester replies to a ticket. */
+  customerReply(reference: string, body: string): void
   close(): Promise<void>
 }
 
@@ -77,8 +84,10 @@ export async function startMock(): Promise<Mock> {
   const mock: Mock = {
     url: '',
     requests: [],
+    listQueries: [],
     tickets,
     revoked: [],
+    revokedAt: [],
     exchanges: 0,
     addAssignedTicket(subject) {
       const base = structuredClone(tickets[0]!)
@@ -91,6 +100,24 @@ export async function startMock(): Promise<Mock> {
         replies: [],
         updated_at: new Date().toISOString(),
       })
+    },
+    customerReply(reference, body) {
+      const t = find(reference)
+      if (!t) throw new Error(`No ticket ${reference}`)
+      const now = new Date().toISOString()
+      const requester = t.requester as { name: string; email: string }
+      t.replies.unshift({
+        id: nextReplyId++,
+        body,
+        is_internal_note: false,
+        is_pinned: false,
+        author: { id: null, name: requester.name, email: requester.email },
+        attachments: [],
+        created_at: now,
+      })
+      t.last_customer_reply_at = now
+      t.last_reply_at = now
+      t.updated_at = now
     },
     close: () =>
       new Promise((done) => {
@@ -138,6 +165,9 @@ export async function startMock(): Promise<Mock> {
     if (method === 'POST' && path === '/auth/revoke') {
       valid.delete(auth)
       mock.revoked.push(auth)
+      mock.revokedAt.push(Date.now())
+      // Answer slowly, so the suite can tell whether the extension waits for the answer.
+      await new Promise((done) => setTimeout(done, REVOKE_DELAY_MS))
       return send(res, 204)
     }
     if (method === 'POST' && path === '/auth/validate') {
@@ -162,9 +192,22 @@ export async function startMock(): Promise<Mock> {
     if (method === 'GET' && path === '/tickets') {
       let rows = [...tickets]
       const q = url.searchParams
+      mock.listQueries.push(new URLSearchParams(q))
       if (q.get('assigned_to')) rows = rows.filter((t) => String(t.assignee?.id) === q.get('assigned_to'))
       if (q.get('unassigned')) rows = rows.filter((t) => t.assignee === null)
       if (q.get('status')) rows = rows.filter((t) => t.status === q.get('status'))
+      if (q.get('open') === '1') rows = rows.filter((t) => t.status !== 'resolved' && t.status !== 'closed')
+      const since = q.get('updated_since')
+      if (since !== null) {
+        const ms = Date.parse(since)
+        if (!Number.isFinite(ms)) {
+          return send(res, 422, {
+            message: 'The updated since field must be a valid date.',
+            errors: { updated_since: ['The updated since field must be a valid date.'] },
+          })
+        }
+        rows = rows.filter((t) => Date.parse(String(t.updated_at)) >= ms)
+      }
       const search = q.get('search')?.toLowerCase()
       if (search) rows = rows.filter((t) => String(t.subject).toLowerCase().includes(search))
       const per = Number(q.get('per_page') ?? 15)

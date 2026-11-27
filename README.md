@@ -17,12 +17,13 @@ Needs Chrome 116 or later and an Escalated install with the staff API turned on.
 
 Click the toolbar icon to open the side panel, enter your helpdesk address and choose Connect. Chrome asks for access to that address, then opens your helpdesk's sign-in page. Approve the connection there. If your helpdesk cannot sign in from the extension, paste an API token under Advanced.
 
-To leave, choose Disconnect in the panel header. It revokes the token and removes what the extension stored.
+To leave, choose Disconnect in the panel header. It asks the helpdesk to revoke the token, deletes everything the extension stored, and then gives up access to the helpdesk address.
 
 ## Docs
 
 - [Privacy](docs/privacy.md)
 - [Development, tests and releasing](docs/development.md)
+- [Store listing text](docs/store-listing.md)
 
 ## License
 
