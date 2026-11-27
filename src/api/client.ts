@@ -115,7 +115,7 @@ export function createClient(apiBase: string, token: string, fetchImpl: FetchLik
   const ref = (r: string) => `/tickets/${encodeURIComponent(r)}`
 
   return {
-    meta: () => request<Schemas['Meta']>('GET', '/meta'),
+    meta: async () => sanitiseMeta(await request<Schemas['Meta']>('GET', '/meta'), base),
     validate: () => request<ValidateResponse>('POST', '/auth/validate'),
     dashboard: () => request<Dashboard>('GET', '/dashboard'),
     listTickets: (q: TicketQuery = {}) => request<TicketPage>('GET', '/tickets', { query: buildQuery(q) }),
@@ -160,7 +160,7 @@ export function normaliseAddress(input: string): string {
     const u = new URL(s)
     return `${u.origin}${u.pathname.replace(/\/+$/, '')}`
   } catch {
-    return s.replace(/\/+$/, '')
+    return s.replace(/[?#].*$/s, '').replace(/\/+$/, '')
   }
 }
 
@@ -175,7 +175,19 @@ function sameOrigin(value: unknown, origin: string): string | null {
   }
 }
 
-export type DiscoverResult = { apiBase: string; meta: Meta } | { error: 'not_found' | 'unreachable' }
+/** Drops connect_url and web_url_template unless they share the API base's origin. */
+export function sanitiseMeta(raw: Schemas['Meta'], apiBase: string): Meta {
+  const origin = new URL(apiBase).origin
+  return {
+    ...raw,
+    features: Array.isArray(raw.features) ? raw.features : [],
+    connect_url: sameOrigin(raw.connect_url, origin),
+    web_url_template: sameOrigin(raw.web_url_template, origin),
+  }
+}
+
+export type DiscoverResult =
+  { apiBase: string; meta: Meta } | { error: 'not_found' | 'unreachable' | 'invalid_address' }
 
 /** `apiPath` is the Advanced "API path" override; it replaces the candidate list. */
 export async function discover(
@@ -184,6 +196,11 @@ export async function discover(
   apiPath?: string,
 ): Promise<DiscoverResult> {
   const root = normaliseAddress(address)
+  try {
+    new URL(root)
+  } catch {
+    return { error: 'invalid_address' }
+  }
   const prefixes = apiPath?.trim() ? [`/${apiPath.trim().replace(/^\/+|\/+$/g, '')}`] : PREFIXES
   let failures = 0
   for (const prefix of prefixes) {
@@ -209,13 +226,7 @@ export async function discover(
         continue
       }
       const raw = body as Schemas['Meta']
-      const origin = new URL(apiBase).origin
-      const meta: Meta = {
-        ...raw,
-        features: Array.isArray(raw.features) ? raw.features : [],
-        connect_url: sameOrigin(raw.connect_url, origin),
-        web_url_template: sameOrigin(raw.web_url_template, origin),
-      }
+      const meta = sanitiseMeta(raw, apiBase)
       return { apiBase, meta }
     } catch {
       failures++

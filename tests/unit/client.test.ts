@@ -201,3 +201,51 @@ describe('discover', () => {
     expect(urls(f)).toEqual(['https://example.com/custom/api/meta'])
   })
 })
+
+describe('fixes', () => {
+  it('meta() applies the same-origin rule', async () => {
+    const f = stub(
+      json(
+        200,
+        meta({ connect_url: 'https://evil.test/c', web_url_template: 'https://evil.test/{reference}' }),
+      ),
+    )
+    const m = await createClient('https://example.com/support/api/v1', 't', f).meta()
+    expect(m.connect_url).toBeNull()
+    expect(m.web_url_template).toBeNull()
+  })
+
+  it('normaliseAddress handles ports, IPv6, query and fragment', () => {
+    expect(normaliseAddress('[::1]:8000')).toBe('https://[::1]:8000')
+    expect(normaliseAddress('localhost:8000')).toBe('https://localhost:8000')
+    expect(normaliseAddress('https://h.test:8443/')).toBe('https://h.test:8443')
+    expect(normaliseAddress('https://h.test/support?x=1#f')).toBe('https://h.test/support')
+    expect(normaliseAddress('https://exa mple.com/a/?x=1#f')).toBe('https://exa mple.com/a')
+  })
+
+  it('encodes + offsets and omits empty query values', async () => {
+    const f = stub(json(200, { data: [], meta: {} }))
+    await createClient('https://h.test/a', 't', f).listTickets({
+      updated_since: '2026-11-26T10:00:00+00:00',
+      search: '',
+      status: undefined,
+      assigned_to: null as unknown as undefined,
+    })
+    expect(urls(f)[0]).toBe('https://h.test/a/tickets?updated_since=2026-11-26T10%3A00%3A00%2B00%3A00')
+  })
+
+  it('never puts the token in a URL or an error message', async () => {
+    const f = stub(json(401, { message: 'Invalid token.' }), json(200, { data: [] }))
+    const c = createClient('https://h.test/a', 'SECRET-TOKEN', f)
+    const err = await c.validate().catch((e) => e)
+    await c.agents()
+    expect(err.message).not.toContain('SECRET-TOKEN')
+    for (const u of urls(f)) expect(u).not.toContain('SECRET-TOKEN')
+  })
+
+  it('reports an unparseable address clearly', async () => {
+    const f = stub()
+    expect(await discover('https://exa mple.com', f)).toEqual({ error: 'invalid_address' })
+    expect(f).not.toHaveBeenCalled()
+  })
+})
