@@ -47,7 +47,11 @@ export type TicketQuery = {
   priority?: ListQuery['priority']
   assigned_to?: ListQuery['assigned_to']
   unassigned?: boolean
+  /** Any open-family status (all but resolved and closed). Only when meta lists tickets.open_filter. */
+  open?: boolean
   search?: string
+  sort_by?: 'created_at' | 'updated_at'
+  sort_dir?: 'asc' | 'desc'
   updated_since?: string
   page?: number
   per_page?: number
@@ -175,22 +179,45 @@ function sameOrigin(value: unknown, origin: string): string | null {
   }
 }
 
-/** Drops connect_url and web_url_template unless they share the API base's origin. */
-export function sanitiseMeta(raw: Schemas['Meta'], apiBase: string): Meta {
+/** True for an http:// URL served under an https:// API, typically a proxy that hides https. */
+function downgraded(value: unknown, apiBase: string): boolean {
+  if (typeof value !== 'string') return false
+  try {
+    return new URL(apiBase).protocol === 'https:' && new URL(value).protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * sanitiseMeta, and whether connect_url was dropped because it is http:// under an https:// API,
+ * so the connect screen can say why sign-in is not offered.
+ */
+export function inspectMeta(
+  raw: Schemas['Meta'],
+  apiBase: string,
+): { meta: Meta; insecureConnectUrl: boolean } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error('Invalid meta response')
   }
   const origin = new URL(apiBase).origin
-  return {
+  const meta: Meta = {
     ...raw,
     features: Array.isArray(raw.features) ? raw.features : [],
     connect_url: sameOrigin(raw.connect_url, origin),
     web_url_template: sameOrigin(raw.web_url_template, origin),
   }
+  return { meta, insecureConnectUrl: meta.connect_url === null && downgraded(raw.connect_url, apiBase) }
+}
+
+/** Drops connect_url and web_url_template unless they share the API base's origin. */
+export function sanitiseMeta(raw: Schemas['Meta'], apiBase: string): Meta {
+  return inspectMeta(raw, apiBase).meta
 }
 
 export type DiscoverResult =
-  { apiBase: string; meta: Meta } | { error: 'not_found' | 'unreachable' | 'invalid_address' }
+  | { apiBase: string; meta: Meta; insecureConnectUrl: boolean }
+  | { error: 'not_found' | 'unreachable' | 'invalid_address' }
 
 /** `apiPath` is the Advanced "API path" override; it replaces the candidate list. */
 export async function discover(
@@ -228,9 +255,7 @@ export async function discover(
       ) {
         continue
       }
-      const raw = body as Schemas['Meta']
-      const meta = sanitiseMeta(raw, apiBase)
-      return { apiBase, meta }
+      return { apiBase, ...inspectMeta(body as Schemas['Meta'], apiBase) }
     } catch {
       failures++
     }

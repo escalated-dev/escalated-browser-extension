@@ -388,10 +388,22 @@ describe('hardening', () => {
         web_url_template: null,
       },
     })
-    const hung = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch
-    await disconnect({ fetchImpl: hung })
-    expect(await getSession()).toBeNull()
-    expect(fake.permissions.granted.size).toBe(0)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const hung = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch
+      let finished = false
+      const done = disconnect({ fetchImpl: hung }).then(() => (finished = true))
+      await vi.advanceTimersByTimeAsync(4900)
+      // Waiting for the revoke: the token is gone locally, host access is still held.
+      expect(await getSession()).toBeNull()
+      expect(fake.permissions.granted.size).toBe(1)
+      expect(finished).toBe(false)
+      await vi.advanceTimersByTimeAsync(100)
+      await done
+      expect(fake.permissions.granted.size).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('disconnect removes the permission when clearing storage rejects', async () => {
@@ -413,6 +425,189 @@ describe('hardening', () => {
     fake.storage.local.clear.mockRejectedValueOnce(new Error('disk'))
     await expect(disconnect({ fetchImpl: fetchStub() })).rejects.toThrow('disk')
     expect(fake.permissions.granted.size).toBe(0)
+  })
+})
+
+const seedSession = (origin = 'https://help.test', token = TOKEN) =>
+  setSession({
+    origin,
+    apiBase: `${origin}/support/api/v1`,
+    token,
+    user: { id: 7, name: 'Ada', email: '' },
+    meta: { api_version: '1.0', backend: 'laravel', features: [], connect_url: null, web_url_template: null },
+  })
+
+describe('revoke before losing host access (E1)', () => {
+  it('issues the revoke before permissions.remove and removes only after it settles', async () => {
+    await seedSession()
+    const fake = getChromeFake()
+    fake.permissions.granted.add('https://help.test/*')
+    let answer!: (r: Response) => void
+    const pending = (): Promise<Response> => new Promise<Response>((resolve) => (answer = resolve))
+    const f = vi.fn(pending) as unknown as typeof fetch & ReturnType<typeof vi.fn>
+    const done = disconnect({ fetchImpl: f })
+    await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(1))
+    expect(f.mock.calls[0]![0]).toBe(`${API}/auth/revoke`)
+    expect((f.mock.calls[0]![1] as RequestInit).signal).toBeInstanceOf(AbortSignal)
+    await vi.waitFor(async () => expect(await getSession()).toBeNull())
+    expect(fake.permissions.remove).not.toHaveBeenCalled()
+    answer(new Response(null, { status: 204 }))
+    await done
+    expect(fake.permissions.remove).toHaveBeenCalledWith({ origins: ['https://help.test/*'] })
+    expect(f.mock.invocationCallOrder[0]!).toBeLessThan(fake.storage.local.clear.mock.invocationCallOrder[0]!)
+    expect(f.mock.invocationCallOrder[0]!).toBeLessThan(fake.permissions.remove.mock.invocationCallOrder[0]!)
+  })
+
+  it('does the same for the old helpdesk when switching', async () => {
+    await seedSession('https://old.test', 'old_tok')
+    const fake = getChromeFake()
+    fake.permissions.granted.add('https://old.test/*')
+    approve()
+    const f = fetchStub({
+      'POST https://old.test/support/api/v1/auth/revoke': () => new Response(null, { status: 204 }),
+    })
+    await connect('help.test', { fetchImpl: f })
+    const revokeAt =
+      f.mock.invocationCallOrder[fetchedUrls(f).indexOf('https://old.test/support/api/v1/auth/revoke')]!
+    const removeOld = fake.permissions.remove.mock.calls.findIndex(
+      (c) => (c[0] as { origins: string[] }).origins[0] === 'https://old.test/*',
+    )
+    expect(removeOld).toBeGreaterThanOrEqual(0)
+    expect(revokeAt).toBeLessThan(fake.permissions.remove.mock.invocationCallOrder[removeOld]!)
+    const revokeCall = f.mock.calls.find((c) => String(c[0]).startsWith('https://old.test'))!
+    expect((revokeCall[1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer old_tok' })
+  })
+
+  it('revokes an older token for the same helpdesk when a new one replaces it', async () => {
+    await seedSession('https://help.test', 'older_tok')
+    approve()
+    const f = fetchStub()
+    await connect('help.test', { fetchImpl: f })
+    const revoke = f.mock.calls.find((c) => String(c[0]) === `${API}/auth/revoke`)!
+    expect((revoke[1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer older_tok' })
+    expect((await getSession())?.token).toBe(TOKEN)
+  })
+})
+
+describe('storage access level (E2)', () => {
+  it('connects when setAccessLevel is rejected as unsupported', async () => {
+    const l = getChromeFake().storage.local
+    l.setAccessLevel.mockRejectedValue(new Error('This StorageArea is not supported.'))
+    approve()
+    const s = await connect('help.test', { fetchImpl: fetchStub() })
+    expect(await getSession()).toEqual(s)
+  })
+
+  it('connects when setAccessLevel does not exist', async () => {
+    const l = getChromeFake().storage.local as unknown as { setAccessLevel?: unknown }
+    delete l.setAccessLevel
+    approve()
+    await expect(connect('help.test', { fetchImpl: fetchStub() })).resolves.toMatchObject({ token: TOKEN })
+  })
+
+  it('revokes the exchanged token when storing the session fails', async () => {
+    getChromeFake().storage.local.set.mockRejectedValueOnce(new Error('quota'))
+    approve()
+    const f = fetchStub()
+    await expect(connect('help.test', { fetchImpl: f })).rejects.toThrow('quota')
+    const revoke = f.mock.calls.find((c) => String(c[0]) === `${API}/auth/revoke`)
+    expect(revoke).toBeDefined()
+    expect((revoke![1] as RequestInit).headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` })
+    expect(getChromeFake().permissions.granted.size).toBe(0)
+  })
+
+  it('revokes the exchanged token when validate fails after the exchange', async () => {
+    approve()
+    const f = fetchStub({ [`POST ${API}/auth/validate`]: () => json(500, {}) })
+    await expect(connect('help.test', { fetchImpl: f })).rejects.toMatchObject({ code: 'connect_failed' })
+    expect(fetchedUrls(f)).toContain(`${API}/auth/revoke`)
+  })
+
+  it('never revokes a pasted token the connect did not create', async () => {
+    getChromeFake().storage.local.set.mockRejectedValueOnce(new Error('quota'))
+    const f = fetchStub()
+    await expect(connect('help.test', { manualToken: TOKEN, fetchImpl: f })).rejects.toThrow('quota')
+    expect(fetchedUrls(f)).not.toContain(`${API}/auth/revoke`)
+  })
+})
+
+describe('disconnect deletes everything (E7)', () => {
+  const memoryStorage = () => {
+    const m = new Map<string, string>()
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+      clear: () => m.clear(),
+      key: () => null,
+      get length() {
+        return m.size
+      },
+    }
+  }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('clears local and session storage and the remembered address', async () => {
+    const ls = memoryStorage()
+    ls.setItem('lastAddress', 'https://help.test')
+    vi.stubGlobal('localStorage', ls)
+    await seedSession()
+    const fake = getChromeFake()
+    await fake.storage.session.set({ 'draft:ESC-1:reply': 'Hi', pendingOpen: { reference: 'ESC-1', at: 1 } })
+    await fake.storage.local.set({ 'poll.snapshot': {}, needsReconnect: true })
+    await disconnect({ fetchImpl: fetchStub() })
+    expect(fake.storage.local.dump()).toEqual({})
+    expect(fake.storage.session.dump()).toEqual({})
+    expect(ls.getItem('lastAddress')).toBeNull()
+  })
+
+  it('a connect leaves host access to the connected origin only', async () => {
+    const fake = getChromeFake()
+    for (const o of ['https://other.test/*', 'http://stale.test/*']) fake.permissions.granted.add(o)
+    approve()
+    await connect('help.test', { fetchImpl: fetchStub() })
+    expect([...fake.permissions.granted]).toEqual(['https://help.test/*'])
+  })
+
+  it('keeps going when Chrome refuses to remove one origin', async () => {
+    const fake = getChromeFake()
+    for (const o of ['http://localhost/*', 'https://other.test/*']) fake.permissions.granted.add(o)
+    const remove = fake.permissions.remove.getMockImplementation()!
+    fake.permissions.remove.mockImplementation(async (p) => {
+      if (p.origins?.includes('http://localhost/*'))
+        throw new Error('You cannot remove required permissions.')
+      return remove(p)
+    })
+    approve()
+    await connect('help.test', { fetchImpl: fetchStub() })
+    expect([...fake.permissions.granted].sort()).toEqual(['http://localhost/*', 'https://help.test/*'])
+  })
+})
+
+describe('connect error codes (M11)', () => {
+  it('maps a 403 from validate to forbidden', async () => {
+    const f = fetchStub({ [`POST ${API}/auth/validate`]: () => json(403, { message: 'Forbidden.' }) })
+    await expect(connect('help.test', { manualToken: TOKEN, fetchImpl: f })).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+  })
+
+  it('says why sign-in is missing when connect_url is http under an https API', async () => {
+    const f = fetchStub({
+      [`GET ${API}/meta`]: () =>
+        json(200, metaBody({ connect_url: 'http://help.test/support/agent/connect-extension' })),
+    })
+    await expect(connect('help.test', { fetchImpl: f })).rejects.toMatchObject({
+      code: 'insecure_connect_url',
+    })
+    expect(getChromeFake().identity.launchWebAuthFlow).not.toHaveBeenCalled()
+  })
+
+  it('keeps needs_manual_token for a connect_url on another origin', async () => {
+    const f = fetchStub({
+      [`GET ${API}/meta`]: () => json(200, metaBody({ connect_url: 'https://evil.test/connect' })),
+    })
+    await expect(connect('help.test', { fetchImpl: f })).rejects.toMatchObject({ code: 'needs_manual_token' })
   })
 })
 

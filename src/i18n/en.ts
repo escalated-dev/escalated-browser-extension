@@ -26,6 +26,9 @@ export const en = {
     state_mismatch: "Sign-in didn't finish. Try again.",
     connect_failed: "Sign-in didn't finish. Try again.",
     invalid_token: "That token wasn't accepted.",
+    forbidden: "This account can't use the extension. Ask your admin for agent access.",
+    insecure_connect_url:
+      "This helpdesk's sign-in page isn't on a secure address. Paste an API token under Advanced, or ask your admin to check the site's proxy settings.",
   } satisfies Record<ConnectErrorCode, string>,
   genericError: 'Something went wrong. Try again.',
   header: {
@@ -35,6 +38,9 @@ export const en = {
     confirmNo: 'Cancel',
     notEncrypted: 'Not encrypted',
   },
+  panel: {
+    forbidden: 'The helpdesk refused access. Reconnect or ask your admin.',
+  },
   queue: {
     tabsLabel: 'Ticket queues',
     mine: 'Mine',
@@ -42,6 +48,9 @@ export const en = {
     open: 'All open',
     searchLabel: 'Search tickets',
     searchPlaceholder: 'Search tickets',
+    statusLabel: 'Status',
+    anyOpenStatus: 'Any open status',
+    anyStatus: 'Any status',
     loading: 'Loading...',
     loadMore: 'Load more',
     retry: 'Try again',
@@ -50,6 +59,7 @@ export const en = {
     emptyUnassigned: 'No unassigned tickets.',
     emptyOpen: 'No open tickets.',
     emptySearch: 'No tickets match your search.',
+    emptyStatus: 'No tickets with that status.',
     noRequester: 'Unknown requester',
     slaBreached: 'SLA breached',
     noActivity: 'No activity yet',

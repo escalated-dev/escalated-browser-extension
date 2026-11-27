@@ -80,6 +80,11 @@ describe('ConnectView', () => {
     ['state_mismatch', "Sign-in didn't finish. Try again."],
     ['connect_failed', "Sign-in didn't finish. Try again."],
     ['invalid_token', "That token wasn't accepted."],
+    ['forbidden', "This account can't use the extension. Ask your admin for agent access."],
+    [
+      'insecure_connect_url',
+      "This helpdesk's sign-in page isn't on a secure address. Paste an API token under Advanced, or ask your admin to check the site's proxy settings.",
+    ],
   ] as [ConnectErrorCode, string][])('maps %s to its copy', async (code, copy) => {
     connectMock.mockRejectedValue(new ConnectError(code))
     const w = mount(ConnectView)

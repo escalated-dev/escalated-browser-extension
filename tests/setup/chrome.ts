@@ -105,6 +105,10 @@ export function createChromeFake() {
       contains: vi.fn(async (p: { origins?: string[] }): Promise<boolean> =>
         (p.origins ?? []).every((o) => granted.has(o)),
       ),
+      getAll: vi.fn(async (): Promise<{ origins: string[]; permissions: string[] }> => ({
+        origins: [...granted],
+        permissions: [],
+      })),
     },
     identity: {
       redirectUrl: 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/',
