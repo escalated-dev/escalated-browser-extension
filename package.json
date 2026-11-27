@@ -15,7 +15,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "vue-tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:types": "node scripts/gen-types.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
