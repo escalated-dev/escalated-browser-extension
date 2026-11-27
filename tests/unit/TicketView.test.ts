@@ -375,6 +375,32 @@ describe('macros and canned responses', () => {
   })
 })
 
+describe('refresh failures', () => {
+  it('shows a small inline notice with retry when a refetch fails while a ticket is shown', async () => {
+    const w = await open()
+    handlers.getTicket = () => fail(500, 'boom')
+    await w.find('select.macro').setValue('5')
+    await w.find('button.macro-yes').trigger('click')
+    await flushPromises()
+    expect(w.find('.head').exists()).toBe(true)
+    expect(w.find('.refresh-error').text()).toContain("Couldn't refresh this ticket.")
+    handlers.getTicket = () => ok({ data: makeTicket({ subject: 'Fresh subject' }) })
+    await w.find('button.refresh-retry').trigger('click')
+    await flushPromises()
+    expect(w.find('.refresh-error').exists()).toBe(false)
+    expect(w.find('.head').text()).toContain('Fresh subject')
+  })
+})
+
+describe('macro names', () => {
+  it('shows names with replacement patterns literally in the confirmation', async () => {
+    handlers.macros = () => ok({ data: [{ id: 9, name: "Tidy $& and $' up", actions: [], order: 0 }] })
+    const w = await open()
+    await w.find('select.macro').setValue('9')
+    expect(w.find('.macro-confirm').text()).toContain('Apply "Tidy $& and $\' up"?')
+  })
+})
+
 describe('App integration', () => {
   const storeSession = () => getChromeFake().storage.local.set({ session: session() })
 

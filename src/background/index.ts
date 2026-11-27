@@ -1,6 +1,7 @@
 import { getSession } from '../state/storage'
 import { handleMessage } from './router'
 import type { ApiResponse } from './messages'
+import { registerContextMenu, syncContextMenu } from './contextMenu'
 import { onNotificationClicked, trackFocusedWindow } from './notify'
 import { ALARM, ensureAlarm, KEYS, poll, resetPollState, setBadgeError } from './poller'
 
@@ -8,6 +9,7 @@ async function init(force: boolean): Promise<void> {
   try {
     await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
     await ensureAlarm(force)
+    await syncContextMenu()
     if (!(await getSession())) {
       const flag = await chrome.storage.local.get(KEYS.needsReconnect)
       if (flag[KEYS.needsReconnect]) await setBadgeError()
@@ -20,6 +22,7 @@ async function init(force: boolean): Promise<void> {
 // Listeners are registered synchronously at the top level (MV3 requirement).
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
 trackFocusedWindow()
+registerContextMenu()
 
 chrome.runtime.onStartup.addListener(() => void init(true))
 chrome.runtime.onInstalled.addListener(() => void init(true))

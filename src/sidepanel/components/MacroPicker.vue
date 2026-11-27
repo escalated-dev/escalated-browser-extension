@@ -43,7 +43,7 @@ async function apply(): Promise<void> {
 <template>
   <div class="macro-wrap">
     <div v-if="pending" class="macro-confirm" role="group" :aria-label="en.macro.label">
-      <span>{{ en.macro.confirm.replace('{name}', pending.name) }}</span>
+      <span>{{ en.macro.confirm.split('{name}').join(pending.name) }}</span>
       <button type="button" class="macro-yes" :disabled="busy" @click="apply">
         {{ busy ? en.macro.applying : en.macro.yes }}
       </button>

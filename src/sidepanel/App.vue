@@ -2,13 +2,15 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Session } from '@/api/client'
 import { PENDING_OPEN_KEY } from '@/background/notify'
+import { PENDING_CREATE_KEY } from '@/background/contextMenu'
 import type { OpenTicketMessage } from '@/background/messages'
 import { getSession } from '@/state/storage'
 import PanelHeader from './components/PanelHeader.vue'
 import ConnectView from './views/ConnectView.vue'
 import QueueView from './views/QueueView.vue'
+import CreateView from './views/CreateView.vue'
 import TicketView from './views/TicketView.vue'
-import { openTicket, router, showQueue } from './router'
+import { openTicket, router, showCreate, showQueue } from './router'
 
 const PENDING_MAX_AGE_MS = 2 * 60 * 1000
 const LAST_ADDRESS_KEY = 'lastAddress'
@@ -48,7 +50,7 @@ function onConnected(s: Session): void {
   needsReconnect.value = false
   rememberAddress(s.origin)
   // A ticket opened from a notification while signed out is kept, not dropped.
-  if (router.view !== 'ticket') showQueue()
+  if (router.view !== 'ticket' && router.view !== 'create') showQueue()
 }
 
 function onDisconnected(): void {
@@ -73,6 +75,18 @@ async function consumePending(value?: unknown): Promise<void> {
   }
 }
 
+type PendingCreate = { selection?: unknown; title?: unknown; url?: unknown; at?: unknown }
+
+async function consumePendingCreate(value?: unknown): Promise<void> {
+  const pending = (value ?? (await chrome.storage.session.get(PENDING_CREATE_KEY))[PENDING_CREATE_KEY]) as
+    PendingCreate | undefined
+  if (!pending) return
+  await chrome.storage.session.remove(PENDING_CREATE_KEY)
+  if (typeof pending.at !== 'number' || Date.now() - pending.at >= PENDING_MAX_AGE_MS) return
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  showCreate({ selection: text(pending.selection), title: text(pending.title), url: text(pending.url) })
+}
+
 function onMessage(
   msg: unknown,
   sender: { id?: string },
@@ -92,13 +106,19 @@ function onStorage(changes: Changes, area: string): void {
   if (area === 'session' && changes[PENDING_OPEN_KEY]?.newValue) {
     void consumePending(changes[PENDING_OPEN_KEY].newValue)
   }
+  if (area === 'session' && changes[PENDING_CREATE_KEY]?.newValue) {
+    void consumePendingCreate(changes[PENDING_CREATE_KEY].newValue)
+  }
 }
 
 onMounted(() => {
   lastAddress.value = readLastAddress()
   chrome.runtime.onMessage.addListener(onMessage)
   chrome.storage.onChanged.addListener(onStorage)
-  void refresh().then(() => consumePending())
+  void refresh().then(async () => {
+    await consumePending()
+    await consumePendingCreate()
+  })
 })
 onBeforeUnmount(() => {
   chrome.runtime.onMessage.removeListener(onMessage)
@@ -120,6 +140,12 @@ onBeforeUnmount(() => {
         <KeepAlive>
           <QueueView v-if="router.view === 'queue'" :session="session" @open="openTicket" />
         </KeepAlive>
+        <CreateView
+          v-if="router.view === 'create'"
+          :key="JSON.stringify(router.createPrefill ?? null)"
+          :session="session"
+          :prefill="router.createPrefill"
+        />
         <TicketView
           v-if="router.view === 'ticket' && router.currentReference"
           :key="router.currentReference"

@@ -100,6 +100,10 @@ const slaLines = computed(() => {
     </p>
 
     <template v-if="ticket">
+      <p v-if="error" class="refresh-error" role="alert">
+        {{ en.ticket.refreshError }}
+        <button type="button" class="refresh-retry" @click="load">{{ en.ticket.refreshRetry }}</button>
+      </p>
       <section class="head">
         <h1 class="title">
           <span class="ref">#{{ ticket.reference }}</span> {{ ticket.subject }}
@@ -155,7 +159,8 @@ const slaLines = computed(() => {
 }
 .back:focus-visible,
 .helpdesk:focus-visible,
-.retry:focus-visible {
+.retry:focus-visible,
+.refresh-retry:focus-visible {
   outline: 2px solid var(--esc-panel-accent);
   outline-offset: 2px;
 }
@@ -169,6 +174,14 @@ const slaLines = computed(() => {
 .state.error {
   color: var(--esc-sla-breach);
 }
+.refresh-error {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--esc-sla-breach);
+  border-bottom: 1px solid var(--esc-panel-border);
+}
+.refresh-retry,
 .retry {
   font: inherit;
   color: var(--esc-panel-accent);
