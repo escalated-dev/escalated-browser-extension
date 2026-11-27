@@ -26,6 +26,10 @@ export default tseslint.config(
       'no-new-func': 'error',
       'vue/no-v-html': 'error',
       'vue/singleline-html-element-content-newline': 'off',
+      // Prettier owns template formatting.
+      'vue/max-attributes-per-line': 'off',
+      'vue/html-self-closing': 'off',
+      'vue/multiline-html-element-content-newline': 'off',
     },
   },
 )
